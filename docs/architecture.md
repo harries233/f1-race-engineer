@@ -1,7 +1,7 @@
 # F1 25 AI Race Engineer — 架构与数据 Schema（v0.1）
 
 > 本文档是项目唯一权威的架构与数据契约。改动设计必须先改这里，再动代码。
-> 状态：2026-08-13 建立。PHASE 1（接收层）+ PHASE 2（校验层）+ PHASE 3（入库，SQLite）已落地，§12 真实 UDP 验证通过（未写分析层/AI 层）。
+> 状态：2026-08-13 建立。PHASE 1（接收层）+ PHASE 2（校验层）+ PHASE 3（入库，SQLite）+ PHASE 4（payload 字段解析 17 结构体 + 字段级校验 + L4 lap/sector 指标）已落地，§12 真实 UDP 验证通过。未写 AI 层 / 逐弯分析（CornerRecord，依赖独立赛道数据层）。
 
 ---
 
@@ -111,8 +111,9 @@ f1-race-engineer/
 │   ├── ingest/               # L1 UDP 接收（PHASE 1，已建 receiver.py）
 │   ├── validate/             # L2 校验（PHASE 2，已建：框架 + 跨帧校验）
 │   ├── store/                # L3 数据库 + Schema（schemas.py + sqlite_store.py 已建）
-│   ├── protocol/             # 多协议分层（f1_25_2026 已实现；f1_25_base 占位）
-│   ├── analysis/             # L4 确定性计算（占位）
+│   ├── protocol/             # 多协议分层（f1_25_2026 已实现：header/packets/parser/
+│   │                         #   validate/structs/payload/field_validate；f1_25_base 占位）
+│   ├── analysis/             # L4 确定性计算（lap.py + sector.py 已建）
 │   ├── tools/                # L4 暴露给 AI 的 Tool 层（占位）
 │   └── agent/                # L5 AI 接入（后置，占位）
 ├── tests/mock/               # MOCK_DATA，绝不进生产

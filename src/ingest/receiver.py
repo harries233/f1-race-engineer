@@ -7,8 +7,8 @@
   - 打 RAW 信封，原样打包成 RawPacket（payload 保留原始 bytes）。
 
 不负责：
-  - payload 体解析（字段映射见 protocol/f1_25_2026/）。
   - 入库（L3）、任何计算（L4）。
+  - payload 类型化字段的持久化（PHASE 4 只内存解析 + 字段校验，RawPacket 仍只存原始 BLOB）。
 
 规则（Master Prompt）：
   - 不硬编码未验证的 UDP 端口：UDP_PORT 必须显式传入，否则报 UDP_PORT_NOT_CONFIGURED。
@@ -22,10 +22,12 @@ import logging
 import socket
 from typing import Callable, Optional
 
-from protocol.f1_25_2026 import parse_packet
+from protocol.f1_25_2026 import parse_packet, parse_payload
+from protocol.f1_25_2026.field_validate import build_field_validation_chain
 from protocol.f1_25_2026.validate import build_validator
 from store.schemas import (
     Confidence,
+    PacketValidationStatus,
     ProtocolVersion,
     RawPacket,
     SourceLevel,
@@ -33,6 +35,7 @@ from store.schemas import (
     now_utc,
 )
 from validate.report import Severity
+from validate.rules import FrameContext
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +62,7 @@ class TelemetryReceiver:
         self.on_packet = on_packet
         self._sock: Optional[socket.socket] = None
         self._validator = build_validator()
+        self._field_validator = build_field_validation_chain()
 
     def bind(self) -> None:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -90,6 +94,16 @@ class TelemetryReceiver:
         source_address = f"{addr[0]}:{addr[1]}"
         parsed = parse_packet(data)
         report = self._validator.validate(data, parsed.header)
+
+        # PHASE 4：header 有效才解析 payload + 跑字段级校验（硬规则 6）。
+        # 解析出的类型化字段仅内存瞬态，不落库（RawPacket 仍只存原始 BLOB）。
+        if parsed.header is not None and report.status == PacketValidationStatus.VALID:
+            payload = parse_payload(parsed.header.m_packetId, data)
+            if payload is not None:
+                field_report = self._field_validator.validate(
+                    FrameContext(data, parsed.header, payload)
+                )
+                report = report.merged(field_report)
 
         protocol_version = None
         if parsed.header is not None:

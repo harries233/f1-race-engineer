@@ -9,6 +9,13 @@ import struct
 
 from protocol.f1_25_2026.header import HEADER_FORMAT, HEADER_SIZE
 from protocol.f1_25_2026.packets import get_packet_definition
+from protocol.f1_25_2026.structs import (
+    CAR_TELEMETRY_FMT,
+    LAP_HISTORY_FMT,
+    MAX_LAP_HISTORY,
+    MAX_TYRE_STINTS,
+    TYRE_STINT_HISTORY_FMT,
+)
 
 # 默认 mock 值（全部合法，便于测试通过；测试可覆盖个别字段制造失败场景）
 DEFAULT_PACKET_FORMAT = 2026
@@ -85,3 +92,79 @@ def build_datagram(
     if total_size < HEADER_SIZE:
         return header[:total_size]  # 制造 datagram < 29 的场景
     return header + b"\x00" * (total_size - HEADER_SIZE)
+
+
+# ---------------------------------------------------------------------------
+# 真实 payload 构造器（PHASE 4）：用 struct.pack 造合法字段值供解析/校验/分析测试。
+# ---------------------------------------------------------------------------
+
+def _per_car_size(fmt: str) -> int:
+    """标准 little-endian packed 结构体尺寸（强制 '<' 前缀）。"""
+    return struct.calcsize("<" + fmt.lstrip("<"))
+
+
+def build_car_telemetry_datagram(
+    *,
+    speed: int = 250,
+    throttle: float = 0.8,
+    steer: float = 0.0,
+    brake: float = 0.0,
+    clutch: int = 100,
+    gear: int = 4,
+    car_index: int = 0,
+    **header_overrides,
+) -> bytes:
+    """Car Telemetry（packet 6）：把玩家车的前 6 个字段（speed..gear）写入真实值。
+
+    字段序 `<HfffBb` = speed, throttle, steer, brake, clutch, gear，位于 per-car 结构体
+    起始处连续 16 字节。其余字段零填充。
+    """
+    data = bytearray(build_datagram(6, **header_overrides))
+    off = HEADER_SIZE + car_index * _per_car_size(CAR_TELEMETRY_FMT)
+    struct.pack_into("<HfffBb", data, off, speed, throttle, steer, brake, clutch, gear)
+    return bytes(data)
+
+
+def build_event_datagram(
+    code: str,
+    details: bytes | None = None,
+    **header_overrides,
+) -> bytes:
+    """Event（packet 3）：4 字节 eventStringCode + 12 字节 EventDataDetails union。"""
+    details = (details if details is not None else b"\x00" * 12).ljust(12, b"\x00")[:12]
+    code_bytes = code.encode("ascii")
+    if len(code_bytes) != 4:
+        raise ValueError("event code must be exactly 4 ascii chars")
+    header = build_header_bytes(packet_id=3, **header_overrides)
+    return header + code_bytes + details[:12]
+
+
+def build_session_history_datagram(
+    *,
+    lap_entries: list[tuple] | None = None,
+    num_laps: int = 0,
+    car_idx: int = 0,
+    **header_overrides,
+) -> bytes:
+    """Session History（packet 11）：写入 N 条完赛圈明细（LAP_HISTORY_FMT 顺序）。
+
+    lap_entries 元素为 8 元组，顺序：
+      (lapTimeInMS, s1ms, s1min, s2ms, s2min, s3ms, s3min, lapValidBitFlags)
+    """
+    lap_entries = lap_entries or []
+    payload = struct.pack("<BBBBBBB", car_idx, num_laps, 0, 0, 0, 0, 0)
+    entry_size = _per_car_size(LAP_HISTORY_FMT)
+    for i in range(MAX_LAP_HISTORY):
+        if i < len(lap_entries):
+            payload += struct.pack("<" + LAP_HISTORY_FMT, *lap_entries[i])
+        else:
+            payload += b"\x00" * entry_size
+    payload += b"\x00" * (MAX_TYRE_STINTS * _per_car_size(TYRE_STINT_HISTORY_FMT))
+    return build_header_bytes(packet_id=11, **header_overrides) + payload
+
+
+def build_session_datagram(*, weather: int = 0, **header_overrides) -> bytes:
+    """Session（packet 1）：把首个 payload 字段 weather（uint8）写入真实值。"""
+    data = bytearray(build_datagram(1, **header_overrides))
+    struct.pack_into("<B", data, HEADER_SIZE, weather)
+    return bytes(data)

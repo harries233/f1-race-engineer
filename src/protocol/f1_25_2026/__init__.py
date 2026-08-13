@@ -14,6 +14,8 @@ from protocol.f1_25_2026.packets import (
     is_valid_packet_id,
 )
 from protocol.f1_25_2026.parser import ParseResult, parse_packet
+from protocol.f1_25_2026.payload import parse_payload
+from protocol.f1_25_2026.field_validate import build_field_validation_chain
 from protocol.f1_25_2026.validate import build_validator
 
 __all__ = [
@@ -28,5 +30,7 @@ __all__ = [
     "is_valid_packet_id",
     "ParseResult",
     "parse_packet",
+    "parse_payload",
     "build_validator",
+    "build_field_validation_chain",
 ]

@@ -7,7 +7,7 @@ ValidationRule 是 PHASE 3 字段级 validator 的扩展点：payload 字段解�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 from store.schemas import PacketHeader
 
@@ -16,10 +16,17 @@ from validate.report import ValidationIssue, ValidationReport
 
 @dataclass(frozen=True)
 class FrameContext:
-    """单帧校验上下文：原始 datagram + 已解析 header（datagram < 29 时 header 为 None）。"""
+    """单帧校验上下文：原始 datagram + 已解析 header +（可选）类型化 payload。
+
+    - data：原始 datagram 字节。
+    - header：已解析 29 字节 header（datagram < 29 时为 None）。
+    - payload：按 packetId 解析出的类型化字段（PHASE 4 起供字段级校验规则用）；
+      未解析 / 解析失败时为 None。
+    """
 
     data: bytes
     header: PacketHeader | None
+    payload: Any | None = None
 
 
 # 一条校验规则：对单帧返回 0+ 条问题。规则应互相独立、无状态。
