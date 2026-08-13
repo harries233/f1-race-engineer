@@ -12,7 +12,7 @@ from protocol.f1_25_2026.packets import get_packet_definition
 
 # 默认 mock 值（全部合法，便于测试通过；测试可覆盖个别字段制造失败场景）
 DEFAULT_PACKET_FORMAT = 2026
-DEFAULT_GAME_YEAR = 26
+DEFAULT_GAME_YEAR = 25  # VERIFIED：真实 2026-format 数据 gameYear=25（.txt "e.g. 26" 是笔误）
 DEFAULT_GAME_MAJOR = 1
 DEFAULT_GAME_MINOR = 1
 DEFAULT_PACKET_VERSION = 1

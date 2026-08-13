@@ -3,7 +3,7 @@
 官方 Spec 明文：Little Endian、packed、无 padding。字段顺序/类型（struct PacketHeader）：
 
     uint16  m_packetFormat             // 2026
-    uint8   m_gameYear                 // 26
+    uint8   m_gameYear                 // 25（VERIFIED：真实数据 + .pdf；.txt 注释 "e.g. 26" 是笔误）
     uint8   m_gameMajorVersion
     uint8   m_gameMinorVersion
     uint8   m_packetVersion
