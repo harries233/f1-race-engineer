@@ -1,0 +1,11 @@
+[project]
+name = "f1-race-engineer"
+version = "0.1.0"
+description = "F1 25 AI Race Engineer — Telemetry ingestion, analysis, and setup recommendation (data-layer first)."
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
