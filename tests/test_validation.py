@@ -1,15 +1,19 @@
-"""Unit tests：基础 Packet Validation（packetFormat/packetId/packetVersion/size/sessionUID/frame id）。"""
+"""Unit tests：header 基础校验（8 项 ERROR + 2 项 WARN），经 validate 框架。"""
 
 import pytest
 
 from mock.factory import build_datagram, build_header_bytes
 from protocol.f1_25_2026.header import HEADER_SIZE, parse_header
-from protocol.f1_25_2026.parser import parse_packet
+from protocol.f1_25_2026.validate import build_validator
 from store.schemas import PacketValidationStatus
 
 
+def _report(datagram: bytes):
+    return build_validator().validate(datagram, parse_header(datagram))
+
+
 def _status_of(datagram: bytes) -> PacketValidationStatus:
-    return parse_packet(datagram).validation.status
+    return _report(datagram).status
 
 
 def test_valid_packet_passes():
@@ -19,10 +23,9 @@ def test_valid_packet_passes():
 
 def test_short_datagram_failed():
     datagram = build_datagram(6, total_size=10)  # < 29
-    assert len(datagram) < HEADER_SIZE
-    result = parse_packet(datagram)
-    assert result.validation.status is PacketValidationStatus.VALIDATION_FAILED
-    assert result.header is None
+    report = _report(datagram)
+    assert report.status is PacketValidationStatus.VALIDATION_FAILED
+    assert any(i.code == "datagram_too_short" for i in report.issues)
 
 
 def test_invalid_packet_format_failed():
@@ -42,11 +45,10 @@ def test_invalid_packet_version_failed():
 
 def test_packet_size_mismatch_failed():
     # 期望 1448，实际给 1000
-    datagram = build_datagram(6, total_size=1000)
-    result = parse_packet(datagram)
-    assert result.validation.status is PacketValidationStatus.VALIDATION_FAILED
+    report = _report(build_datagram(6, total_size=1000))
+    assert report.status is PacketValidationStatus.VALIDATION_FAILED
     # 记录 packet_id / expected_size / actual_size / difference
-    joined = " ".join(result.validation.issues)
+    joined = " ".join(i.message for i in report.issues)
     assert "packet_id=6" in joined
     assert "expected_size=1448" in joined
     assert "actual_size=1000" in joined
@@ -65,3 +67,15 @@ def test_frame_identifier_type():
     )
     assert header.m_frameIdentifier == 0xFFFFFFFF
     assert header.m_overallFrameIdentifier == 0
+
+
+def test_player_car_index_out_of_range_warns():
+    report = _report(build_datagram(6, player_car_index=99))
+    assert report.status is PacketValidationStatus.VALID  # WARN 不翻 status
+    assert any(i.code == "player_car_index_out_of_range" for i in report.issues)
+
+
+def test_secondary_player_car_index_out_of_range_warns():
+    report = _report(build_datagram(6, secondary_player_car_index=42))
+    assert report.status is PacketValidationStatus.VALID
+    assert any(i.code == "secondary_player_car_index_out_of_range" for i in report.issues)

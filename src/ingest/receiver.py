@@ -3,7 +3,7 @@
 职责（严格收敛）：
   - 绑定 UDP socket，收 datagram。
   - 解析 29 字节 header（F1_25_2026 / 2026 Season Pack）。
-  - 执行基础校验（packetFormat/packetId/packetVersion/size/sessionUID/frame id）。
+  - 委托 L2 校验层（src/validate/ + protocol/f1_25_2026/validate.py）做校验。
   - 打 RAW 信封，原样打包成 RawPacket（payload 保留原始 bytes）。
 
 不负责：
@@ -23,14 +23,15 @@ import socket
 from typing import Callable, Optional
 
 from protocol.f1_25_2026 import parse_packet
+from protocol.f1_25_2026.validate import build_validator
 from store.schemas import (
     Confidence,
-    PacketValidationStatus,
     ProtocolVersion,
     RawPacket,
     SourceLevel,
     now_utc,
 )
+from validate.report import Severity
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class UDPPortNotConfiguredError(RuntimeError):
 
 
 class TelemetryReceiver:
-    """收 UDP datagram → 解析 header → 基础校验 → RawPacket 回调。"""
+    """收 UDP datagram → 解析 header → 委托 L2 校验 → RawPacket 回调。"""
 
     def __init__(
         self,
@@ -56,6 +57,7 @@ class TelemetryReceiver:
         self.port = port
         self.on_packet = on_packet
         self._sock: Optional[socket.socket] = None
+        self._validator = build_validator()
 
     def bind(self) -> None:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -79,13 +81,14 @@ class TelemetryReceiver:
                 self.on_packet(packet)
 
     def _to_packet(self, data: bytes, addr: tuple) -> RawPacket:
-        """把一帧原始 datagram 解析 + 校验 + 打包成 RawPacket。
+        """把一帧原始 datagram 解析 + 委托 L2 校验 + 打包成 RawPacket。
 
         原始 datagram 原样保留在 payload；校验失败也保留，不丢弃、不修复。
         """
         received_at = now_utc()
         source_address = f"{addr[0]}:{addr[1]}"
         parsed = parse_packet(data)
+        report = self._validator.validate(data, parsed.header)
 
         protocol_version = None
         if parsed.header is not None:
@@ -93,9 +96,11 @@ class TelemetryReceiver:
                 parsed.header.m_packetFormat
             )
 
-        if parsed.validation.status is PacketValidationStatus.VALIDATION_FAILED:
-            for issue in parsed.validation.issues:
-                logger.warning("packet validation failed: %s", issue)
+        for issue in report.issues:
+            if issue.severity is Severity.ERROR:
+                logger.warning("packet validation %s: %s", issue.code, issue.message)
+            else:
+                logger.debug("packet validation %s: %s", issue.code, issue.message)
 
         return RawPacket(
             source_level=SourceLevel.RAW,
@@ -108,5 +113,5 @@ class TelemetryReceiver:
             payload=data,
             received_at=received_at,
             source_address=source_address,
-            validation_status=parsed.validation.status,
+            validation_status=report.status,
         )

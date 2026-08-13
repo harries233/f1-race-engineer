@@ -1,7 +1,7 @@
 # F1 25 AI Race Engineer — 架构与数据 Schema（v0.1）
 
 > 本文档是项目唯一权威的架构与数据契约。改动设计必须先改这里，再动代码。
-> 状态：2026-08-13 建立，PHASE 1 骨架 + Schema 定义已落地（未写分析层/AI 层）。
+> 状态：2026-08-13 建立。PHASE 1（接收层）+ PHASE 2（校验层）已落地，§12 真实 UDP 验证通过（未写分析层/AI 层）。
 
 ---
 
@@ -109,7 +109,7 @@ f1-race-engineer/
 ├── docs/architecture.md      # 本文档
 ├── src/
 │   ├── ingest/               # L1 UDP 接收（PHASE 1，已建 receiver.py）
-│   ├── validate/             # L2 校验（PHASE 2，占位）
+│   ├── validate/             # L2 校验（PHASE 2，已建：框架 + 跨帧校验）
 │   ├── store/                # L3 数据库 + Schema（schemas.py 已建）
 │   ├── protocol/             # 多协议分层（f1_25_2026 已实现；f1_25_base 占位）
 │   ├── analysis/             # L4 确定性计算（占位）
