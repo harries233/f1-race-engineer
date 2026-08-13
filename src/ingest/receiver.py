@@ -29,6 +29,7 @@ from store.schemas import (
     ProtocolVersion,
     RawPacket,
     SourceLevel,
+    ValidationIssueRecord,
     now_utc,
 )
 from validate.report import Severity
@@ -114,4 +115,10 @@ class TelemetryReceiver:
             received_at=received_at,
             source_address=source_address,
             validation_status=report.status,
+            validation_issues=[
+                ValidationIssueRecord(
+                    code=issue.code, severity=issue.severity.value, message=issue.message
+                )
+                for issue in report.issues
+            ],
         )

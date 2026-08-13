@@ -112,11 +112,24 @@ class PacketHeader(BaseModel):
     m_secondaryPlayerCarIndex: int          # 255 = 无第二玩家
 
 
+class ValidationIssueRecord(BaseModel):
+    """单条校验问题（L2 校验报告的持久化表示，随 RawPacket 流入 L3）。
+
+    severity 用 str（"ERROR"/"WARN"/"INFO"），与 validate 层 Severity 的 value 对齐；
+    本文件不重复自建枚举，避免 store → validate 反向依赖。
+    """
+
+    code: str       # 稳定机器码，如 "packet_size_mismatch"
+    severity: str   # "ERROR" | "WARN" | "INFO"
+    message: str    # 人类可读
+
+
 class RawPacket(Stamped):
     """L1 产出：一帧原始 UDP datagram。
 
     payload 原样保留（原始 bytes，禁止二次加工）；校验失败也保留原始 datagram，
     不丢弃、不截断、不补零、不自动修复。datagram < 29 字节时 header 为 None。
+    validation_issues 承载 L2 校验报告明细，随帧一起流入 L3 入库。
     """
 
     protocol_version: Optional[ProtocolVersion] = None
@@ -125,6 +138,7 @@ class RawPacket(Stamped):
     received_at: str                        # 实际接收时间（UTC ISO8601）
     source_address: Optional[str] = None    # recvfrom 返回的源地址 "ip:port"
     validation_status: PacketValidationStatus = PacketValidationStatus.VALIDATION_FAILED
+    validation_issues: list[ValidationIssueRecord] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

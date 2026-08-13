@@ -30,6 +30,7 @@ def test_to_packet_preserves_payload_and_source():
     assert packet.source_address == "192.168.1.10:51234"
     assert packet.received_at  # 非空
     assert packet.validation_status is PacketValidationStatus.VALID
+    assert packet.validation_issues == []      # 有效帧无 issue 明细
     assert packet.header is not None
     assert packet.header.m_packetId == 6
 
@@ -41,3 +42,4 @@ def test_to_packet_failed_keeps_raw_datagram():
 
     assert packet.payload == datagram
     assert packet.validation_status is PacketValidationStatus.VALIDATION_FAILED
+    assert any(i.code == "packet_format_mismatch" for i in packet.validation_issues)
