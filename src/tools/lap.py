@@ -12,24 +12,53 @@ import json
 
 from analysis.lap import build_lap_record
 from protocol.f1_25_2026.payload import LapHistoryData
-from store.schemas import Confidence, SourceLevel, now_utc
+from store.schemas import Confidence, LapRecord, SourceLevel, now_utc
 from tools.registry import Tool, ToolResult
+
+
+def completed_laps(store, car_index: int, session_uid=None) -> list[LapRecord]:
+    """读某车最新 Session History，重建全部完赛圈 LapRecord（L4 计算后）。
+
+    供 get_lap / compare / validate_setup 复用，保证「圈号 → 圈速」口径一致。
+    无数据返回空列表。
+    """
+    where = "m_carIdx = ?" + (" AND session_uid = ?" if session_uid is not None else "")
+    params = (car_index,) + ((session_uid,) if session_uid is not None else ())
+    rows = store.query(
+        "packet_session_history",
+        where=where,
+        params=params,
+        order_by="frame_identifier DESC",
+        limit=1,
+    )
+    if not rows:
+        return []
+
+    row = rows[0]
+    num_laps = row.get("m_numLaps") or 0
+    raw_history = row.get("m_lapHistoryData")
+    entries = json.loads(raw_history) if isinstance(raw_history, str) else (raw_history or [])
+
+    records = []
+    for i, entry in enumerate(entries[:num_laps]):
+        lap_history = LapHistoryData(**entry)
+        records.append(
+            build_lap_record(
+                lap_history,
+                lap_number=i + 1,
+                session_uid=row.get("session_uid"),
+                received_at=row.get("received_at"),
+            )
+        )
+    return records
 
 
 def get_lap(store) -> Tool:
     """构造 get_lap Tool（依赖注入 store 只读句柄）。"""
 
     def handler(car_index: int, session_uid=None, lap_number=None):
-        where = "m_carIdx = ?" + (" AND session_uid = ?" if session_uid is not None else "")
-        params = (car_index,) + ((session_uid,) if session_uid is not None else ())
-        rows = store.query(
-            "packet_session_history",
-            where=where,
-            params=params,
-            order_by="frame_identifier DESC",
-            limit=1,
-        )
-        if not rows:
+        records = completed_laps(store, car_index, session_uid)
+        if not records:
             return ToolResult(
                 source_level=SourceLevel.DERIVED,
                 source="calc:lap_metrics",
@@ -40,31 +69,18 @@ def get_lap(store) -> Tool:
                 notes=[f"车辆 {car_index} 无 Session History 数据"],
             )
 
-        row = rows[0]
-        num_laps = row.get("m_numLaps") or 0
-        raw_history = row.get("m_lapHistoryData")
-        entries = json.loads(raw_history) if isinstance(raw_history, str) else (raw_history or [])
-
-        records = []
-        for i, entry in enumerate(entries[:num_laps]):
-            lap_history = LapHistoryData(**entry)
-            record = build_lap_record(
-                lap_history,
-                lap_number=i + 1,
-                session_uid=row.get("session_uid"),
-                received_at=row.get("received_at"),
-            )
-            if lap_number is not None and record.lap_number != lap_number:
-                continue
-            records.append(record.model_dump())
-
+        data = [
+            record.model_dump()
+            for record in records
+            if lap_number is None or record.lap_number == lap_number
+        ]
         return ToolResult(
             source_level=SourceLevel.DERIVED,
             source="calc:lap_metrics",
-            timestamp=row.get("received_at"),
+            timestamp=records[0].timestamp,
             unit="s",
             confidence=Confidence.HIGH,
-            data=records,
+            data=data,
             notes=["圈号按 lapHistoryData 数组位置(1-based)推导"],
         )
 

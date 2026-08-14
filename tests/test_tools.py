@@ -9,7 +9,8 @@ from mock.factory import (
     build_session_datagram,
     build_session_history_datagram,
 )
-from store.schemas import SourceLevel
+from store.experiment_store import ExperimentStore
+from store.schemas import SourceLevel, ValidationStatus
 from store.structured_store import StructuredPacketStore
 from tools import build_registry
 
@@ -135,7 +136,75 @@ def test_function_schemas_shape(db_path):
 
     assert {s["function"]["name"] for s in schemas} == {
         "get_session", "get_telemetry", "get_lap", "list_sessions",
+        "compare", "save_setup", "list_setups", "validate_setup",
     }
     for s in schemas:
         assert s["type"] == "function"
         assert s["function"]["parameters"]["type"] == "object"
+
+
+# ---------------------------------------------------------------------------
+# PHASE 8 新增 Tool：compare / save_setup / list_setups / validate_setup
+# ---------------------------------------------------------------------------
+
+def test_compare_tool(db_path):
+    store = ExperimentStore(db_path)
+    entries = [
+        (95000, 123, 0, 500, 0, 377, 0, 0x01),  # lap1 95.0s
+        (96000, 130, 0, 510, 0, 380, 0, 0x01),  # lap2 96.0s
+        (94000, 120, 0, 490, 0, 370, 0, 0x01),  # lap3 94.0s
+    ]
+    _seed(store, [build_session_history_datagram(lap_entries=entries, num_laps=3)])
+    result = build_registry(store).call(
+        "compare", car_index=0, baseline_laps=[1, 2], test_laps=[3]
+    )
+    store.close()
+
+    assert result.source_level == SourceLevel.DERIVED
+    assert result.data["best_delta_s"] == pytest.approx(-1.0)  # 94.0 - 95.0
+    assert result.data["baseline_n"] == 2
+    assert result.data["test_n"] == 1
+
+
+def test_save_setup_and_list_setups(db_path):
+    store = ExperimentStore(db_path)
+    registry = build_registry(store)
+    registry.call(
+        "save_setup",
+        setup_version="v1", track_id="shanghai", label="baseline",
+        params={"front_wing": 30, "rear_wing": 25},
+    )
+    result = registry.call("list_setups")
+    store.close()
+
+    assert result.source_level == SourceLevel.GAME_DATA
+    assert len(result.data) == 1
+    assert result.data[0]["setup_version"] == "v1"
+    assert result.data[0]["params"]["front_wing"] == 30
+
+
+def test_validate_setup_tool_persists_experiment(db_path):
+    store = ExperimentStore(db_path)
+    entries = [
+        (95000, 123, 0, 500, 0, 377, 0, 0x01),  # lap1
+        (96000, 130, 0, 510, 0, 380, 0, 0x01),  # lap2
+        (97000, 135, 0, 515, 0, 385, 0, 0x01),  # lap3
+        (94000, 120, 0, 490, 0, 370, 0, 0x01),  # lap4
+        (94100, 121, 0, 491, 0, 371, 0, 0x01),  # lap5
+        (94200, 122, 0, 492, 0, 372, 0, 0x01),  # lap6
+    ]
+    _seed(store, [build_session_history_datagram(lap_entries=entries, num_laps=6)])
+    result = build_registry(store).call(
+        "validate_setup",
+        exp_id="exp1",
+        hypothesis="lower wing is faster",
+        setup_baseline_version="v1",
+        setup_test_version="v2",
+        baseline_laps=[1, 2, 3],
+        test_laps=[4, 5, 6],
+        car_index=0,
+    )
+
+    assert result.data["status"] == "VALIDATED"
+    assert store.get_experiment("exp1").status is ValidationStatus.VALIDATED
+    store.close()

@@ -31,5 +31,5 @@ def test_race_engineer_exposes_schemas(tmp_path):
     schemas = engineer.function_schemas()
     store.close()
 
-    assert len(schemas) == 4
+    assert len(schemas) == 8
     assert all(s["type"] == "function" for s in schemas)
