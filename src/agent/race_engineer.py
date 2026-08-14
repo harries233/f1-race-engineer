@@ -31,6 +31,10 @@ class RaceEngineer:
         """OpenAI function-calling 形状的工具清单。"""
         return self.registry.function_schemas()
 
+    def anthropic_tools(self) -> list[dict]:
+        """Anthropic Messages API 形状的工具清单（name/description/input_schema）。"""
+        return self.registry.anthropic_tools()
+
     def tool_names(self) -> list[str]:
         return self.registry.names()
 

@@ -88,3 +88,14 @@ class ToolRegistry:
             }
             for tool in self._by_name.values()
         ]
+
+    def anthropic_tools(self) -> list[dict]:
+        """Anthropic Messages API 的 tool 形状（name/description/input_schema）。"""
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.parameters,
+            }
+            for tool in self._by_name.values()
+        ]
