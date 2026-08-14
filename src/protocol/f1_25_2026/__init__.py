@@ -15,6 +15,7 @@ from protocol.f1_25_2026.packets import (
 )
 from protocol.f1_25_2026.parser import ParseResult, parse_packet
 from protocol.f1_25_2026.payload import parse_payload
+from protocol.f1_25_2026.flatten import flatten_payload
 from protocol.f1_25_2026.field_validate import build_field_validation_chain
 from protocol.f1_25_2026.validate import build_validator
 
@@ -31,6 +32,7 @@ __all__ = [
     "ParseResult",
     "parse_packet",
     "parse_payload",
+    "flatten_payload",
     "build_validator",
     "build_field_validation_chain",
 ]

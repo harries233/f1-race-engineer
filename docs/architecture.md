@@ -1,7 +1,7 @@
 # F1 25 AI Race Engineer — 架构与数据 Schema（v0.1）
 
 > 本文档是项目唯一权威的架构与数据契约。改动设计必须先改这里，再动代码。
-> 状态：2026-08-13 建立。PHASE 1（接收层）+ PHASE 2（校验层）+ PHASE 3（入库，SQLite）+ PHASE 4（payload 字段解析 17 结构体 + 字段级校验 + L4 lap/sector 指标）已落地，§12 真实 UDP 验证通过。未写 AI 层 / 逐弯分析（CornerRecord，依赖独立赛道数据层）。
+> 状态：2026-08-13 建立。PHASE 1（接收层）+ PHASE 2（校验层）+ PHASE 3（入库，SQLite）+ PHASE 4（payload 字段解析 17 结构体 + 字段级校验 + L4 lap/sector 指标）+ PHASE 5（结构化入库）已落地，§12 真实 UDP 验证通过。未写 AI 层 / 逐弯分析（CornerRecord，依赖独立赛道数据层）。
 
 ---
 
@@ -78,6 +78,8 @@
 | SetupSnapshot | L3 | setup_version / params(SetupParams) | 版本化管理，参数清单待确认 |
 | Experiment | L4 | exp_id / status / test_conditions / results | BASELINE/TEST 对比与验证 |
 
+**PHASE 5 结构化遥测表**：除上述领域实体外，L3 另有一组「原始遥测投影表」`packet_<name>`（每 packet 类型一张），由 `protocol/f1_25_2026/flatten.py` 把 payload 打平成 `StructuredTable`、`store/structured_store.py` 落库。规则：标量→列、per-car 数组→每车一行（加 `car_index`）、嵌套集合→JSON 文本列；每行带 5 字段信封 + `raw_packets(id)` 外键做可追溯。这些表是 RAW 级投影（`source_level=RAW`、`unit="raw"`），逐字段单位在官方 Spec。
+
 ---
 
 ## 4. ⚠️ 关键设计依赖：赛道数据层
@@ -110,9 +112,11 @@ f1-race-engineer/
 ├── src/
 │   ├── ingest/               # L1 UDP 接收（PHASE 1，已建 receiver.py）
 │   ├── validate/             # L2 校验（PHASE 2，已建：框架 + 跨帧校验）
-│   ├── store/                # L3 数据库 + Schema（schemas.py + sqlite_store.py 已建）
+│   ├── store/                # L3 数据库 + Schema（schemas.py + sqlite_store.py +
+│   │                         #   structured_store.py 已建）
 │   ├── protocol/             # 多协议分层（f1_25_2026 已实现：header/packets/parser/
-│   │                         #   validate/structs/payload/field_validate；f1_25_base 占位）
+│   │                         #   validate/structs/payload/field_validate/flatten；
+│   │                         #   f1_25_base 占位）
 │   ├── analysis/             # L4 确定性计算（lap.py + sector.py 已建）
 │   ├── tools/                # L4 暴露给 AI 的 Tool 层（占位）
 │   └── agent/                # L5 AI 接入（后置，占位）

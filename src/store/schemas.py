@@ -11,9 +11,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -130,6 +131,8 @@ class RawPacket(Stamped):
     payload 原样保留（原始 bytes，禁止二次加工）；校验失败也保留原始 datagram，
     不丢弃、不截断、不补零、不自动修复。datagram < 29 字节时 header 为 None。
     validation_issues 承载 L2 校验报告明细，随帧一起流入 L3 入库。
+    structured（PHASE 5 起）是 payload 解析结果打平成的瞬时表结构，仅供结构化入库；
+    不属原始 BLOB 契约，payload 字段仍只存原始 bytes。校验失败 / payload 未解析时为 None。
     """
 
     protocol_version: Optional[ProtocolVersion] = None
@@ -139,6 +142,25 @@ class RawPacket(Stamped):
     source_address: Optional[str] = None    # recvfrom 返回的源地址 "ip:port"
     validation_status: PacketValidationStatus = PacketValidationStatus.VALIDATION_FAILED
     validation_issues: list[ValidationIssueRecord] = Field(default_factory=list)
+    structured: Optional["StructuredTable"] = None
+
+
+@dataclass(frozen=True)
+class StructuredTable:
+    """一个 payload 打平成的表结构（PHASE 5 结构化入库的中性 DTO）。
+
+    由 protocol 层（flatten.py）生成，store 层（structured_store.py）消费。
+    store 不 import protocol，只认识本结构，避免 store → protocol 循环依赖。
+
+      - columns / column_types：字段列名与其 SQLite 类型（"INTEGER"/"REAL"/"TEXT"），
+        已含 car 包的 "car_index" 列（若为 car 包）。
+      - rows：每行与 columns 对齐；嵌套集合（数组/内嵌模型列表/dict）已 JSON 化为 TEXT。
+    """
+
+    table_name: str
+    columns: tuple[str, ...]
+    column_types: tuple[str, ...]
+    rows: tuple[tuple[Any, ...], ...]
 
 
 # ---------------------------------------------------------------------------

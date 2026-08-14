@@ -8,7 +8,8 @@
 
 不负责：
   - 入库（L3）、任何计算（L4）。
-  - payload 类型化字段的持久化（PHASE 4 只内存解析 + 字段校验，RawPacket 仍只存原始 BLOB）。
+  - payload 类型化字段：PHASE 4 只内存解析 + 字段校验；PHASE 5 起打平成 `structured`
+    随帧带出，由 L3 结构化入库（RawPacket.payload 仍只存原始 BLOB）。
 
 规则（Master Prompt）：
   - 不硬编码未验证的 UDP 端口：UDP_PORT 必须显式传入，否则报 UDP_PORT_NOT_CONFIGURED。
@@ -22,7 +23,7 @@ import logging
 import socket
 from typing import Callable, Optional
 
-from protocol.f1_25_2026 import parse_packet, parse_payload
+from protocol.f1_25_2026 import flatten_payload, parse_packet, parse_payload
 from protocol.f1_25_2026.field_validate import build_field_validation_chain
 from protocol.f1_25_2026.validate import build_validator
 from store.schemas import (
@@ -96,7 +97,8 @@ class TelemetryReceiver:
         report = self._validator.validate(data, parsed.header)
 
         # PHASE 4：header 有效才解析 payload + 跑字段级校验（硬规则 6）。
-        # 解析出的类型化字段仅内存瞬态，不落库（RawPacket 仍只存原始 BLOB）。
+        # PHASE 5：payload 打平成 structured 随帧带出，供 L3 结构化入库；原始 BLOB 仍只存 payload。
+        structured = None
         if parsed.header is not None and report.status == PacketValidationStatus.VALID:
             payload = parse_payload(parsed.header.m_packetId, data)
             if payload is not None:
@@ -104,6 +106,7 @@ class TelemetryReceiver:
                     FrameContext(data, parsed.header, payload)
                 )
                 report = report.merged(field_report)
+                structured = flatten_payload(parsed.header.m_packetId, payload)
 
         protocol_version = None
         if parsed.header is not None:
@@ -135,4 +138,5 @@ class TelemetryReceiver:
                 )
                 for issue in report.issues
             ],
+            structured=structured,
         )
