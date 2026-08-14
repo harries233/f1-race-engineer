@@ -222,9 +222,9 @@ class CornerRecord(Stamped):
 
     track_id: str
     corner_number: int
-    entry_braking_point: Optional[float] = None      # DERIVED，米
+    entry_braking_point: Optional[float] = None      # DERIVED，米（沿赛道里程 lapDistance）
     entry_brake_pressure: Optional[float] = None     # DERIVED，%
-    entry_brake_release: Optional[float] = None      # DERIVED，时间点
+    entry_brake_release: Optional[float] = None      # DERIVED，米（沿赛道里程 lapDistance，刹车释放点）
     entry_speed: Optional[float] = None              # DERIVED
     mid_min_speed: Optional[float] = None            # DERIVED
     mid_steering: Optional[float] = None             # DERIVED

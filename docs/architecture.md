@@ -1,7 +1,7 @@
 # F1 25 AI Race Engineer — 架构与数据 Schema（v0.1）
 
 > 本文档是项目唯一权威的架构与数据契约。改动设计必须先改这里，再动代码。
-> 状态：2026-08-13 建立。PHASE 1（接收层）+ PHASE 2（校验层）+ PHASE 3（入库，SQLite）+ PHASE 4（payload 字段解析 17 结构体 + 字段级校验 + L4 lap/sector 指标）+ PHASE 5（结构化入库）+ PHASE 6/7（Tool 层 + L5 AI 骨架）+ PHASE 8（L4 compare + A-B 实验 + validate_setup）+ PHASE 9（sector 速度点切分 + get_sector）已落地，§12 真实 UDP 验证通过。未写逐弯分析（CornerRecord，依赖独立赛道数据层）。
+> 状态：2026-08-13 建立。PHASE 1–11 已落地（L1 接收 → L2 校验 → L3 入库 SQLite → payload 解析+字段校验 → L4 lap/sector/compare/validate → 结构化入库 → Tool 层 → L5 AI 骨架 → L5 接真实 LLM → 赛道数据层 + 逐弯 CornerRecord），§12 真实 UDP 验证通过。
 
 ---
 
@@ -74,7 +74,7 @@
 | Session | L2/L3 | session_uid / track_id / session_type / weather / track_temp / … | 天气/油量/ERS/DRS 上下文 |
 | LapRecord | L3+L4 | lap_number / lap_time / sector1-3 / valid_flag / setup_version | setup_version → SetupSnapshot |
 | SectorRecord | L4 | sector_time / entry_speed / min_speed / exit_speed | 速度字段 DERIVED |
-| CornerRecord | L4 | entry/mid/exit 各指标 + time_loss_phase | 依赖独立赛道数据层（见 §4） |
+| CornerRecord | L4 | entry/mid/exit 各指标 + time_loss_phase | 依赖独立赛道数据层（见 §4，PHASE 11 已实现；time_loss_phase/exit_traction/mid_stability 待参考圈/车轮滑移/稳定性定义） |
 | SetupSnapshot | L3 | setup_version / params(SetupParams) | 版本化管理，参数清单待确认 |
 | Experiment | L4 | exp_id / status / test_conditions / results | BASELINE/TEST 对比与验证 |
 
@@ -82,11 +82,16 @@
 
 ---
 
-## 4. ⚠️ 关键设计依赖：赛道数据层
+## 4. 赛道数据层（PHASE 11 已落地）
 
-标准 F1 25 UDP 遥测**不提供**弯角坐标 / 刹车点参考 / 弯角边界。Master Prompt 里的 `get_track` / 逐弯分析依赖一份**独立的赛道数据层**（含几何与参考点，类似 f1-shanghai-setup 的 `TRACK_DETAIL`，但需更完整的几何数据）。
+标准 F1 25 UDP 遥测**不提供**弯角坐标 / 刹车点参考 / 弯角边界。逐弯分析依赖一份**独立的赛道数据层**（`src/track/`），不塞进 UDP 接收，否则「逐弯分析」会退化成无几何依据的猜测。
 
-**结论**：赛道数据层必须单独建模块，不塞进 UDP 接收。否则「逐弯分析」会退化成无几何依据的猜测。此模块排期另议，先占位，不阻塞 PHASE 1。
+实现要点：
+
+- **坐标选择**：弯角用 `m_lapDistance`（沿赛道里程，米）区间定义，不依赖 Motion 世界坐标——UDP 自带该字段，且遥测帧与 lapDistance 帧的跨 packet 对齐已有 PHASE 9 手法（`m_overallFrameIdentifier`）。
+- **模型与注册表**：`Track` / `CornerDefinition`（Pydantic）+ 内存注册表 `get_track` / `list_tracks` / `register`。
+- **种子赛道**：`shanghai`（16 弯、全长 5.451 km = GAME_DATA；lapDistance 起止 = HYPOTHESIS 均匀等分占位，待真实数据标定）。
+- **分层**：几何在 `src/track/`；逐弯指标确定性计算在 `src/analysis/corner.py`（对齐 / 分段 / entry-mid-exit 归约）；AI 只经 `get_corner` Tool 读取，产出 `CornerRecord`（DERIVED，置信度 MEDIUM）。
 
 ---
 
@@ -117,12 +122,13 @@ f1-race-engineer/
 │   ├── protocol/             # 多协议分层（f1_25_2026 已实现：header/packets/parser/
 │   │                         #   validate/structs/payload/field_validate/flatten；
 │   │                         #   f1_25_base 占位）
+│   ├── track/                # 赛道数据层（PHASE 11：models + registry + shanghai 种子）
 │   ├── analysis/             # L4 确定性计算（lap.py + sector.py + compare.py +
-│   │                         #   experiment.py + sector_segment.py 已建）
+│   │                         #   experiment.py + sector_segment.py + corner.py 已建）
 │   ├── tools/                # L4→L5 Tool 层（registry + get_session/get_telemetry/
-│   │                         #   get_lap/get_sector/list_sessions/compare/
+│   │                         #   get_lap/get_sector/get_corner/list_sessions/compare/
 │   │                         #   save_setup/list_setups/validate_setup）
-│   └── agent/                # L5 AI 接入骨架（PHASE 7：race_engineer.py 调度器）
+│   └── agent/                # L5 AI（PHASE 7 race_engineer.py 调度器 + PHASE 10 claude.py 真实 LLM）
 ├── tests/mock/               # MOCK_DATA，绝不进生产
 └── pyproject.toml
 ```
@@ -137,4 +143,4 @@ f1-race-engineer/
 | 2 | Schema 用 Pydantic v2 | 直接服务 PHASE 2 校验、PHASE 3 序列化；枚举约束 source_level/confidence |
 | 3 | 数据信封强制 5 字段 | 落实「NO DATA → NO FACT」可追溯性 |
 | 4 | F1 25 UDP 字段不硬编码 | 防止把未验证字段当事实，标 TODO(verify) 待官方 spec |
-| 5 | 赛道数据层独立模块 | UDP 不含弯角几何，逐弯分析必须另建数据层 |
+| 5 | 赛道数据层独立模块 | UDP 不含弯角几何，逐弯分析必须另建数据层（PHASE 11：src/track/，弯角用 m_lapDistance 区间定义，不依赖世界坐标） |

@@ -10,6 +10,7 @@ list_sessions/compare/get_sector）只需 store 有 query()/sessions()；写 Too
 """
 
 from tools.compare import compare
+from tools.corner import get_corner
 from tools.discover import list_sessions
 from tools.experiment import validate_setup
 from tools.lap import get_lap
@@ -28,6 +29,7 @@ def build_registry(store) -> ToolRegistry:
             get_telemetry(store),
             get_lap(store),
             get_sector(store),
+            get_corner(store),
             list_sessions(store),
             compare(store),
             save_setup(store),
@@ -45,6 +47,7 @@ __all__ = [
     "get_telemetry",
     "get_lap",
     "get_sector",
+    "get_corner",
     "list_sessions",
     "compare",
     "save_setup",
