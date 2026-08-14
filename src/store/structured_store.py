@@ -30,6 +30,7 @@ _COMMON_COLUMNS: tuple[tuple[str, str], ...] = (
     ("received_at", "TEXT"),
     ("session_uid", "INTEGER"),
     ("frame_identifier", "INTEGER"),
+    ("overall_frame_identifier", "INTEGER"),
     ("source_level", "TEXT"),
     ("source", "TEXT"),
     ("timestamp", "TEXT"),
@@ -71,6 +72,7 @@ class StructuredPacketStore(PacketStore):
             packet.received_at,
             header.m_sessionUID,
             header.m_frameIdentifier,
+            header.m_overallFrameIdentifier,
             "RAW",          # source_level：结构化行恒为 RAW（直接解析自 UDP，无计算）
             source,
             packet.timestamp,

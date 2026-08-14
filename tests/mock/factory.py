@@ -11,6 +11,7 @@ from protocol.f1_25_2026.header import HEADER_FORMAT, HEADER_SIZE
 from protocol.f1_25_2026.packets import get_packet_definition
 from protocol.f1_25_2026.structs import (
     CAR_TELEMETRY_FMT,
+    LAP_DATA_FMT,
     LAP_HISTORY_FMT,
     MAX_LAP_HISTORY,
     MAX_TYRE_STINTS,
@@ -137,6 +138,37 @@ def build_event_datagram(
         raise ValueError("event code must be exactly 4 ascii chars")
     header = build_header_bytes(packet_id=3, **header_overrides)
     return header + code_bytes + details[:12]
+
+
+def build_lap_data_datagram(
+    *,
+    car_index: int = 0,
+    current_lap_num: int = 1,
+    sector: int = 0,
+    lap_distance: float = 0.0,
+    current_lap_time_ms: int = 0,
+    **header_overrides,
+) -> bytes:
+    """Lap Data（packet 2）：写入某车 currentLapNum / sector / lapDistance / currentLapTime。
+
+    其余字段零填充；用 LAP_DATA_FMT 完整打包，避免手算偏移。
+    """
+    # 字段序见 structs.py LAP_DATA_FMT：II + HBHBHBHB + fff + B*15 + HHB + fB
+    b15 = [0] * 15
+    b15[1] = current_lap_num          # 15 个 uint8 中第 2 个 = m_currentLapNum
+    b15[4] = sector                   # 第 5 个 = m_sector
+    vals = (
+        0, current_lap_time_ms,       # lastLapTimeInMS, currentLapTimeInMS
+        0, 0, 0, 0, 0, 0, 0, 0,       # sector1/2 + deltaInFront + deltaLeader (HBHBHBHB)
+        lap_distance, 0.0, 0.0,       # lapDistance, totalDistance, safetyCarDelta
+        *b15,
+        0, 0, 0,                      # pitLaneTimeInLaneInMS, pitStopTimerInMS, pitStopShouldServePen
+        0.0, 0,                       # speedTrapFastestSpeed, speedTrapFastestLap
+    )
+    data = bytearray(build_datagram(2, **header_overrides))
+    off = HEADER_SIZE + car_index * _per_car_size(LAP_DATA_FMT)
+    struct.pack_into("<" + LAP_DATA_FMT, data, off, *vals)
+    return bytes(data)
 
 
 def build_session_history_datagram(

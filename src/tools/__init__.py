@@ -14,6 +14,7 @@ from tools.discover import list_sessions
 from tools.experiment import validate_setup
 from tools.lap import get_lap
 from tools.registry import Tool, ToolRegistry, ToolResult
+from tools.sector import get_sector
 from tools.session import get_session
 from tools.setup import list_setups, save_setup
 from tools.telemetry import get_telemetry
@@ -26,6 +27,7 @@ def build_registry(store) -> ToolRegistry:
             get_session(store),
             get_telemetry(store),
             get_lap(store),
+            get_sector(store),
             list_sessions(store),
             compare(store),
             save_setup(store),
@@ -42,6 +44,7 @@ __all__ = [
     "get_session",
     "get_telemetry",
     "get_lap",
+    "get_sector",
     "list_sessions",
     "compare",
     "save_setup",

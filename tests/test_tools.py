@@ -6,6 +6,7 @@ from ingest.receiver import TelemetryReceiver
 from mock.factory import (
     build_car_telemetry_datagram,
     build_datagram,
+    build_lap_data_datagram,
     build_session_datagram,
     build_session_history_datagram,
 )
@@ -135,7 +136,7 @@ def test_function_schemas_shape(db_path):
     store.close()
 
     assert {s["function"]["name"] for s in schemas} == {
-        "get_session", "get_telemetry", "get_lap", "list_sessions",
+        "get_session", "get_telemetry", "get_lap", "get_sector", "list_sessions",
         "compare", "save_setup", "list_setups", "validate_setup",
     }
     for s in schemas:
@@ -208,3 +209,43 @@ def test_validate_setup_tool_persists_experiment(db_path):
     assert result.data["status"] == "VALIDATED"
     assert store.get_experiment("exp1").status is ValidationStatus.VALIDATED
     store.close()
+
+
+def test_get_sector_with_speed_points(db_path):
+    store = StructuredPacketStore(db_path)
+    # 一圈完赛记录：s1=25s s2=30s s3=40s
+    history = build_session_history_datagram(
+        lap_entries=[(95000, 25000, 0, 30000, 0, 40000, 0, 0x01)], num_laps=1
+    )
+    # 速度流 + sector 标签（overall_frame_identifier 时间对齐）
+    datagrams = [history]
+    datagrams.append(build_lap_data_datagram(car_index=0, current_lap_num=1, sector=0, overall_frame_identifier=10))
+    datagrams.append(build_car_telemetry_datagram(car_index=0, speed=200, overall_frame_identifier=11))
+    datagrams.append(build_car_telemetry_datagram(car_index=0, speed=90, overall_frame_identifier=12))
+    datagrams.append(build_car_telemetry_datagram(car_index=0, speed=150, overall_frame_identifier=13))
+    datagrams.append(build_lap_data_datagram(car_index=0, current_lap_num=1, sector=1, overall_frame_identifier=20))
+    datagrams.append(build_car_telemetry_datagram(car_index=0, speed=80, overall_frame_identifier=21))
+    _seed(store, datagrams)
+
+    result = build_registry(store).call("get_sector", car_index=0, lap_number=1)
+    store.close()
+
+    assert result.source_level == SourceLevel.DERIVED
+    records = {r["sector_index"]: r for r in result.data}
+    assert set(records) == {0, 1, 2}
+
+    s0 = records[0]
+    assert s0["sector_time"] == pytest.approx(25.0)
+    assert s0["entry_speed"] == 200.0
+    assert s0["min_speed"] == 90.0
+    assert s0["exit_speed"] == 150.0
+
+    s1 = records[1]
+    assert s1["sector_time"] == pytest.approx(30.0)
+    assert s1["entry_speed"] == 80.0  # 只有一帧 → entry=min=exit
+    assert s1["min_speed"] == 80.0
+
+    s2 = records[2]
+    assert s2["sector_time"] == pytest.approx(40.0)
+    assert s2["entry_speed"] is None  # 无该 sector 的速度样本
+    assert s2["min_speed"] is None
