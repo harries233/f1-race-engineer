@@ -1,7 +1,7 @@
 # F1 25 AI Race Engineer — 架构与数据 Schema（v0.1）
 
 > 本文档是项目唯一权威的架构与数据契约。改动设计必须先改这里，再动代码。
-> 状态：2026-08-13 建立。PHASE 1（接收层）+ PHASE 2（校验层）+ PHASE 3（入库，SQLite）+ PHASE 4（payload 字段解析 17 结构体 + 字段级校验 + L4 lap/sector 指标）+ PHASE 5（结构化入库）+ PHASE 6/7（Tool 层 + L5 AI 骨架）已落地，§12 真实 UDP 验证通过。未写逐弯分析（CornerRecord，依赖独立赛道数据层）/ A-B 实验（PHASE 8/9）。
+> 状态：2026-08-13 建立。PHASE 1（接收层）+ PHASE 2（校验层）+ PHASE 3（入库，SQLite）+ PHASE 4（payload 字段解析 17 结构体 + 字段级校验 + L4 lap/sector 指标）+ PHASE 5（结构化入库）+ PHASE 6/7（Tool 层 + L5 AI 骨架）+ PHASE 8（L4 compare + A-B 实验 + validate_setup）+ PHASE 9（sector 速度点切分 + get_sector）已落地，§12 真实 UDP 验证通过。未写逐弯分析（CornerRecord，依赖独立赛道数据层）。
 
 ---
 
@@ -113,13 +113,15 @@ f1-race-engineer/
 │   ├── ingest/               # L1 UDP 接收（PHASE 1，已建 receiver.py）
 │   ├── validate/             # L2 校验（PHASE 2，已建：框架 + 跨帧校验）
 │   ├── store/                # L3 数据库 + Schema（schemas.py + sqlite_store.py +
-│   │                         #   structured_store.py 已建）
+│   │                         #   structured_store.py + experiment_store.py 已建）
 │   ├── protocol/             # 多协议分层（f1_25_2026 已实现：header/packets/parser/
 │   │                         #   validate/structs/payload/field_validate/flatten；
 │   │                         #   f1_25_base 占位）
-│   ├── analysis/             # L4 确定性计算（lap.py + sector.py 已建）
-│   ├── tools/                # L4→L5 Tool 层（PHASE 6/7：registry + get_session/
-│   │                         #   get_telemetry/get_lap/list_sessions）
+│   ├── analysis/             # L4 确定性计算（lap.py + sector.py + compare.py +
+│   │                         #   experiment.py + sector_segment.py 已建）
+│   ├── tools/                # L4→L5 Tool 层（registry + get_session/get_telemetry/
+│   │                         #   get_lap/get_sector/list_sessions/compare/
+│   │                         #   save_setup/list_setups/validate_setup）
 │   └── agent/                # L5 AI 接入骨架（PHASE 7：race_engineer.py 调度器）
 ├── tests/mock/               # MOCK_DATA，绝不进生产
 └── pyproject.toml
