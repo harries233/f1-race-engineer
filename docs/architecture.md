@@ -1,7 +1,7 @@
 # F1 25 AI Race Engineer — 架构与数据 Schema（v0.1）
 
 > 本文档是项目唯一权威的架构与数据契约。改动设计必须先改这里，再动代码。
-> 状态：2026-08-13 建立。PHASE 1（接收层）+ PHASE 2（校验层）+ PHASE 3（入库，SQLite）+ PHASE 4（payload 字段解析 17 结构体 + 字段级校验 + L4 lap/sector 指标）+ PHASE 5（结构化入库）已落地，§12 真实 UDP 验证通过。未写 AI 层 / 逐弯分析（CornerRecord，依赖独立赛道数据层）。
+> 状态：2026-08-13 建立。PHASE 1（接收层）+ PHASE 2（校验层）+ PHASE 3（入库，SQLite）+ PHASE 4（payload 字段解析 17 结构体 + 字段级校验 + L4 lap/sector 指标）+ PHASE 5（结构化入库）+ PHASE 6/7（Tool 层 + L5 AI 骨架）已落地，§12 真实 UDP 验证通过。未写逐弯分析（CornerRecord，依赖独立赛道数据层）/ A-B 实验（PHASE 8/9）。
 
 ---
 
@@ -118,8 +118,9 @@ f1-race-engineer/
 │   │                         #   validate/structs/payload/field_validate/flatten；
 │   │                         #   f1_25_base 占位）
 │   ├── analysis/             # L4 确定性计算（lap.py + sector.py 已建）
-│   ├── tools/                # L4 暴露给 AI 的 Tool 层（占位）
-│   └── agent/                # L5 AI 接入（后置，占位）
+│   ├── tools/                # L4→L5 Tool 层（PHASE 6/7：registry + get_session/
+│   │                         #   get_telemetry/get_lap/list_sessions）
+│   └── agent/                # L5 AI 接入骨架（PHASE 7：race_engineer.py 调度器）
 ├── tests/mock/               # MOCK_DATA，绝不进生产
 └── pyproject.toml
 ```

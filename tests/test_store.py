@@ -148,3 +148,32 @@ def test_receiver_wire_to_store(db_path):
     packet = receiver._to_packet(build_datagram(6), ("127.0.0.1", 5000))
     receiver.on_packet(packet)  # 模拟 serve_forever 的每帧回调
     assert store.count() == 1
+
+
+def test_query_returns_dict_rows(db_path):
+    store = PacketStore(db_path)
+    store.save(_make_packet(build_datagram(6)))
+    store.save(_make_packet(build_datagram(6, frame_identifier=12346)))
+    rows = store.query(
+        "raw_packets",
+        where="packet_id = ?",
+        params=(6,),
+        order_by="frame_identifier DESC",
+        limit=1,
+    )
+    store.close()
+
+    assert len(rows) == 1
+    assert rows[0]["packet_id"] == 6
+    assert rows[0]["frame_identifier"] == 12346
+
+
+def test_sessions_groups_by_session_uid(db_path):
+    store = PacketStore(db_path)
+    store.save(_make_packet(build_datagram(6, session_uid=1)))
+    store.save(_make_packet(build_datagram(6, session_uid=2)))
+    sessions = store.sessions()
+    store.close()
+
+    assert {s["session_uid"] for s in sessions} == {1, 2}
+    assert all(s["packet_count"] == 1 for s in sessions)

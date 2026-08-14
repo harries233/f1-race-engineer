@@ -131,5 +131,51 @@ class PacketStore:
         """已入库帧数（测试/健康检查用）。"""
         return self._conn.execute("SELECT COUNT(*) FROM raw_packets").fetchone()[0]
 
+    def query(
+        self,
+        table: str,
+        *,
+        where: str = "1=1",
+        params: tuple = (),
+        order_by: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict]:
+        """通用只读查询（L4 Tool 层读取数据的唯一入口；测试也可用）。
+
+        返回 list[dict]（列名 → 值）。table / where / order_by 由内部代码（Tool 层）
+        硬编码，不对外暴露任意 SQL。JSON 文本列（如数组字段）原样返回字符串，
+        由调用方按需 json.loads。
+        """
+        sql = f"SELECT * FROM {table} WHERE {where}"
+        if order_by:
+            sql += f" ORDER BY {order_by}"
+        if limit is not None:
+            sql += f" LIMIT {int(limit)}"
+        if offset:
+            sql += f" OFFSET {int(offset)}"
+        try:
+            cur = self._conn.execute(sql, tuple(params))
+        except sqlite3.OperationalError as exc:
+            if "no such table" in str(exc):
+                return []           # 惰性建表的 packet_* 表尚不存在 → 视为零行
+            raise
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    def sessions(self) -> list[dict]:
+        """已入库的会话清单（session_uid + 帧数 + 首末 sessionTime），供 Tool 发现。
+
+        session_uid 直接来自原始帧 header；first/last_session_time 为帧内 sessionTime 秒。
+        """
+        cur = self._conn.execute(
+            "SELECT session_uid, COUNT(*) AS packet_count, "
+            "MIN(session_time) AS first_session_time, MAX(session_time) AS last_session_time "
+            "FROM raw_packets WHERE session_uid IS NOT NULL "
+            "GROUP BY session_uid ORDER BY session_uid"
+        )
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
     def close(self) -> None:
         self._conn.close()
