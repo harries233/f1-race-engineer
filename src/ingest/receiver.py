@@ -85,9 +85,12 @@ class TelemetryReceiver:
                 data, addr = self._sock.recvfrom(65535)
             except OSError:
                 return  # socket 已 close（PHASE 14 stop_receiver），干净退出
-            packet = self._to_packet(data, addr)
-            if self.on_packet is not None:
-                self.on_packet(packet)
+            try:
+                packet = self._to_packet(data, addr)
+                if self.on_packet is not None:
+                    self.on_packet(packet)
+            except Exception:  # noqa: BLE001 — 单帧解析/落库异常只跳过该帧，不杀死接收线程
+                logger.exception("packet processing failed; skipping frame")
 
     def close(self) -> None:
         """关闭 UDP socket，使阻塞中的 serve_forever 干净退出。"""
