@@ -1,7 +1,7 @@
 # F1 25 AI Race Engineer — 架构与数据 Schema（v0.1）
 
 > 本文档是项目唯一权威的架构与数据契约。改动设计必须先改这里，再动代码。
-> 状态：2026-08-13 建立。PHASE 1–13 已落地（L1 接收 → L2 校验 → L3 入库 SQLite → payload 解析+字段校验 → L4 lap/sector/compare/validate → 结构化入库 → Tool 层 → L5 AI 骨架 → L5 接真实 LLM → 赛道数据层 + 逐弯 CornerRecord → Setup 推荐产品化 → 占位收尾：逐弯三项进阶指标 + m_trackId 映射表），§12 真实 UDP 验证通过。
+> 状态：2026-08-13 建立。PHASE 1–14 已落地（L1 接收 → L2 校验 → L3 入库 SQLite → payload 解析+字段校验 → L4 lap/sector/compare/validate → 结构化入库 → Tool 层 → L5 AI 骨架 → L5 接真实 LLM → 赛道数据层 + 逐弯 CornerRecord → Setup 推荐产品化 → 占位收尾：逐弯三项进阶指标 + m_trackId 映射表 → HTTP/WS 服务层），§12 真实 UDP 验证通过。
 
 ---
 
@@ -36,6 +36,14 @@
 │ L1  接收层（UDP socket）                    PH1 │  ← 只负责收帧 + 打 source 标签
 └─────────────────────────────────────────────────┘
 ```
+
+**服务层（PHASE 14，`src/server/`，横跨 L1+L3+L5 之上）**：把 `receiver`（UDP）+ `store` +
+`RaceEngineer` 组装成常驻 FastAPI 服务，暴露 REST + WebSocket 给手机薄客户端。服务层只接线、
+不算数：REST 薄封装 Tool 层（返回值保留 5 字段信封），AI 对话委托 `ClaudeRaceEngineer`，
+实时遥测从已解析的 `RawPacket.structured` 提取（`events.py`）经 `ConnectionManager`（`ws.py`，
+跨线程安全广播）推给 WS 连接。`service.py` 的 `Service` 是装配点：`ingest()` 落库+广播、
+`ask()` 对话、`start/stop_receiver()` 启停 UDP 后台线程（供 lifespan）。因 FastAPI 同步端点跑
+线程池、UDP 接收跑独立线程，store 层加 `check_same_thread=False` + `RLock` 串行化 DB 访问。
 
 硬约束：
 
@@ -134,8 +142,11 @@ f1-race-engineer/
 │   ├── tools/                # L4→L5 Tool 层（registry + get_session/get_telemetry/
 │   │                         #   get_lap/get_sector/get_corner/list_sessions/compare/
 │   │                         #   save_setup/list_setups/validate_setup/
-│   │                         #   recommend_setup/list_recommendations）
-│   └── agent/                # L5 AI（PHASE 7 race_engineer.py 调度器 + PHASE 10 claude.py 真实 LLM）
+│   │                         #   recommend_setup/list_recommendations/list_experiments）
+│   ├── agent/                # L5 AI（PHASE 7 race_engineer.py 调度器 + PHASE 10 claude.py 真实 LLM）
+│   └── server/               # PHASE 14 服务层（events.py 实时事件 + ws.py 连接管理 +
+│                             #   service.py 装配 + app.py FastAPI REST/WS 路由）
+├── scripts/serve.py          # 常驻服务 CLI（UDP receiver + FastAPI）
 ├── tests/mock/               # MOCK_DATA，绝不进生产
 └── pyproject.toml
 ```
@@ -151,3 +162,5 @@ f1-race-engineer/
 | 3 | 数据信封强制 5 字段 | 落实「NO DATA → NO FACT」可追溯性 |
 | 4 | F1 25 UDP 字段不硬编码 | 防止把未验证字段当事实，标 TODO(verify) 待官方 spec |
 | 5 | 赛道数据层独立模块 | UDP 不含弯角几何，逐弯分析必须另建数据层（PHASE 11：src/track/，弯角用 m_lapDistance 区间定义，不依赖世界坐标） |
+| 6 | FastAPI 服务层做「接线」不做计算 | REST 薄封装 Tool 层保留信封；AI 对话走 ClaudeRaceEngineer；实时遥测复用已解析 structured，不重新解析/查库 |
+| 7 | store 层线程安全（PHASE 14） | FastAPI 线程池端点 + UDP 接收线程并发访问同一 store → `check_same_thread=False` + `RLock` 串行化，换单一连接干净生命周期 |

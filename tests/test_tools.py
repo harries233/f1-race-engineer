@@ -138,7 +138,7 @@ def test_function_schemas_shape(db_path):
     assert {s["function"]["name"] for s in schemas} == {
         "get_session", "get_telemetry", "get_lap", "get_sector", "get_corner", "list_sessions",
         "compare", "save_setup", "list_setups", "validate_setup",
-        "recommend_setup", "list_recommendations",
+        "recommend_setup", "list_recommendations", "list_experiments",
     }
     for s in schemas:
         assert s["type"] == "function"

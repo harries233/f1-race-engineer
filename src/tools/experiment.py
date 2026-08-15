@@ -116,3 +116,31 @@ def validate_setup(store) -> Tool:
         },
         handler=handler,
     )
+
+
+def list_experiments(store) -> Tool:
+    """构造 list_experiments Tool（依赖注入 ExperimentStore，需有 list_experiments 方法）。"""
+
+    def handler(status: str | None = None) -> ToolResult:
+        experiments = store.list_experiments(status=status)
+        return ToolResult(
+            source_level=SourceLevel.DERIVED,
+            source="calc:experiment",
+            timestamp=now_utc(),
+            unit="s",
+            confidence=Confidence.HIGH,
+            data=[e.model_dump() for e in experiments],
+            notes=["返回已持久化的 A-B 实验记录；各实验自身含 status/confidence"],
+        )
+
+    return Tool(
+        name="list_experiments",
+        description="列出已运行的 Setup A-B 实验（可选按 status 过滤：PREDICTED/VALIDATED/NOT_VALIDATED 等）。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "description": "可选：按 ValidationStatus 过滤"},
+            },
+        },
+        handler=handler,
+    )

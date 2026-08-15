@@ -58,7 +58,6 @@ class StructuredPacketStore(PacketStore):
     # ------------------------------------------------------------------
 
     def _save_structured(self, raw_id: int, packet: RawPacket, structured: StructuredTable) -> None:
-        self._ensure_table(structured)
         header = packet.header
         source = "udp:packet:" + structured.table_name.removeprefix("packet_")
 
@@ -79,25 +78,28 @@ class StructuredPacketStore(PacketStore):
             "raw",          # unit：行内混单位（km/h/°C/psi），逐字段单位在官方 Spec
             "HIGH",         # confidence
         )
-        for row in structured.rows:
-            self._conn.execute(insert_sql, common + tuple(row))
-        self._conn.commit()
+        with self._lock:
+            self._ensure_table(structured)
+            for row in structured.rows:
+                self._conn.execute(insert_sql, common + tuple(row))
+            self._conn.commit()
 
     def _ensure_table(self, structured: StructuredTable) -> None:
-        if structured.table_name in self._structured_tables:
-            return
-        column_defs = ["id INTEGER PRIMARY KEY AUTOINCREMENT"]
-        column_defs += [f"{name} {typ}" for name, typ in _COMMON_COLUMNS]
-        column_defs += [
-            f"{name} {typ}"
-            for name, typ in zip(structured.columns, structured.column_types)
-        ]
-        ddl = (
-            f"CREATE TABLE IF NOT EXISTS {structured.table_name} "
-            f"({', '.join(column_defs)})"
-        )
-        self._conn.execute(ddl)
-        self._structured_tables.add(structured.table_name)
+        with self._lock:
+            if structured.table_name in self._structured_tables:
+                return
+            column_defs = ["id INTEGER PRIMARY KEY AUTOINCREMENT"]
+            column_defs += [f"{name} {typ}" for name, typ in _COMMON_COLUMNS]
+            column_defs += [
+                f"{name} {typ}"
+                for name, typ in zip(structured.columns, structured.column_types)
+            ]
+            ddl = (
+                f"CREATE TABLE IF NOT EXISTS {structured.table_name} "
+                f"({', '.join(column_defs)})"
+            )
+            self._conn.execute(ddl)
+            self._structured_tables.add(structured.table_name)
 
     # ------------------------------------------------------------------
     # 查询辅助（测试/健康检查）
@@ -105,15 +107,17 @@ class StructuredPacketStore(PacketStore):
 
     def table_names(self) -> list[str]:
         """已建的结构化表名（`packet_*`）。"""
-        rows = self._conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='table' AND name LIKE 'packet_%' ORDER BY name"
-        ).fetchall()
-        return [r[0] for r in rows]
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name LIKE 'packet_%' ORDER BY name"
+            ).fetchall()
+            return [r[0] for r in rows]
 
     def rows_in(self, table: str) -> int:
         """某结构化表的行数。"""
-        return self._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        with self._lock:
+            return self._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
 
     def structured_row_count(self) -> int:
         """所有结构化表的总行数。"""

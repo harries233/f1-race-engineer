@@ -13,7 +13,7 @@ list_sessions/compare/get_sector/get_corner）只需 store 有 query()/sessions(
 from tools.compare import compare
 from tools.corner import get_corner
 from tools.discover import list_sessions
-from tools.experiment import validate_setup
+from tools.experiment import list_experiments, validate_setup
 from tools.lap import get_lap
 from tools.recommend import list_recommendations, recommend_setup
 from tools.registry import Tool, ToolRegistry, ToolResult
@@ -39,6 +39,7 @@ def build_registry(store) -> ToolRegistry:
             validate_setup(store),
             recommend_setup(store),
             list_recommendations(store),
+            list_experiments(store),
         ]
     )
 
@@ -59,5 +60,6 @@ __all__ = [
     "validate_setup",
     "recommend_setup",
     "list_recommendations",
+    "list_experiments",
     "build_registry",
 ]

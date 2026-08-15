@@ -77,14 +77,26 @@ class TelemetryReceiver:
         return self._to_packet(data, addr)
 
     def serve_forever(self) -> None:
-        """阻塞循环收帧，每帧触发 on_packet 回调，直到 KeyboardInterrupt。"""
+        """阻塞循环收帧，每帧触发 on_packet 回调，直到 socket 被 close()。"""
         if self._sock is None:
             self.bind()
         while True:
-            data, addr = self._sock.recvfrom(65535)
+            try:
+                data, addr = self._sock.recvfrom(65535)
+            except OSError:
+                return  # socket 已 close（PHASE 14 stop_receiver），干净退出
             packet = self._to_packet(data, addr)
             if self.on_packet is not None:
                 self.on_packet(packet)
+
+    def close(self) -> None:
+        """关闭 UDP socket，使阻塞中的 serve_forever 干净退出。"""
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+            self._sock = None
 
     def _to_packet(self, data: bytes, addr: tuple) -> RawPacket:
         """把一帧原始 datagram 解析 + 委托 L2 校验 + 打包成 RawPacket。
