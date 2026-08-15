@@ -32,7 +32,7 @@ def test_race_engineer_exposes_schemas(tmp_path):
     schemas = engineer.function_schemas()
     store.close()
 
-    assert len(schemas) == 10
+    assert len(schemas) == 12
     assert all(s["type"] == "function" for s in schemas)
 
 
@@ -73,7 +73,7 @@ def test_claude_engine_exposes_anthropic_tools(tmp_path):
     tools = engine.engine.anthropic_tools()
     store.close()
 
-    assert len(tools) == 10
+    assert len(tools) == 12
     # Anthropic 形状：name/description/input_schema，无 OpenAI 的 type/function 包装
     assert all({"name", "description", "input_schema"} <= set(t) for t in tools)
     assert all("type" not in t for t in tools)

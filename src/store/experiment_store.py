@@ -1,11 +1,12 @@
 """L3 数据层 —— 实验与 Setup 快照持久化（PHASE 8）。
 
-把 `SetupSnapshot` 与 `Experiment`（PHASE 4 已定义 Schema，此前只定义未落库）
-持久化到 SQLite。继承 `StructuredPacketStore`，复用同一连接 + raw/结构化入库逻辑，
-新增两张表：
+把 `SetupSnapshot` 与 `Experiment`（PHASE 4 已定义 Schema，此前只定义未落库）、
+`SetupRecommendation`（PHASE 12）持久化到 SQLite。继承 `StructuredPacketStore`，
+复用同一连接 + raw/结构化入库逻辑，新增三张表：
 
   - setup_snapshots：一次 Setup 快照（版本化，供 A/B 实验引用）。
   - experiments：一次 A-B 实验（BASELINE/TEST 圈号集合 + delta_metrics + status）。
+  - recommendations：一条 Setup 推荐（SetupParams + rationale + evidence，PHASE 12）。
 
 持久化策略：整条 Pydantic 模型 `model_dump_json()` 存 `data` TEXT 列（含 5 字段
 数据信封），另抽出自然键（setup_version / exp_id / status）作独立列便于查询。
@@ -19,7 +20,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from store.schemas import Experiment, SetupSnapshot
+from store.schemas import Experiment, SetupRecommendation, SetupSnapshot
 from store.structured_store import StructuredPacketStore
 
 _SCHEMA_SQL = """
@@ -29,6 +30,11 @@ CREATE TABLE IF NOT EXISTS setup_snapshots (
 );
 CREATE TABLE IF NOT EXISTS experiments (
     exp_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    data TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recommendations (
+    recommendation_id TEXT PRIMARY KEY,
     status TEXT NOT NULL,
     data TEXT NOT NULL
 );
@@ -93,3 +99,37 @@ class ExperimentStore(StructuredPacketStore):
                 "SELECT data FROM experiments ORDER BY exp_id"
             ).fetchall()
         return [Experiment.model_validate_json(r[0]) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Setup 推荐（PHASE 12）
+    # ------------------------------------------------------------------
+
+    def save_recommendation(self, recommendation: SetupRecommendation) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO recommendations (recommendation_id, status, data) VALUES (?, ?, ?)",
+            (
+                recommendation.recommendation_id,
+                recommendation.status.value,
+                recommendation.model_dump_json(),
+            ),
+        )
+        self._conn.commit()
+
+    def get_recommendation(self, recommendation_id: str) -> SetupRecommendation | None:
+        row = self._conn.execute(
+            "SELECT data FROM recommendations WHERE recommendation_id = ?",
+            (recommendation_id,),
+        ).fetchone()
+        return SetupRecommendation.model_validate_json(row[0]) if row else None
+
+    def list_recommendations(self, status: str | None = None) -> list[SetupRecommendation]:
+        if status is not None:
+            rows = self._conn.execute(
+                "SELECT data FROM recommendations WHERE status = ? ORDER BY recommendation_id",
+                (status,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT data FROM recommendations ORDER BY recommendation_id"
+            ).fetchall()
+        return [SetupRecommendation.model_validate_json(r[0]) for r in rows]

@@ -242,33 +242,41 @@ class CornerRecord(Stamped):
 # ---------------------------------------------------------------------------
 
 class SetupParams(BaseModel):
-    """F1 25 Car Setup 参数。
+    """F1 25 Car Setup 参数 —— 1:1 镜像 Car Setups packet（packet 5）的 23 字段。
 
-    TODO(verify): 每个字段的存在性、单位、值域均需官方 spec 或游戏内 Setup 页面交叉确认。
-    范围参考（已在你 f1-shanghai-setup 项目验证，GAME_DATA，仅供交叉核对）：
+    字段名用 snake_case，右侧注释标注 packet 5 原始字段名（GAME_DATA）。全部 Optional：
+    快照只填用户改过的项、推荐只填建议改动的项，None = 保持现状（未提及 = 不改）。
+
+    TODO(verify): 每个字段的单位、值域均需官方 Spec 或游戏内 Setup 页面交叉确认。
+    范围参考（已在 f1-shanghai-setup 项目验证，GAME_DATA，仅供交叉核对）：
       差速 10–100%、前轮倾角 -3.5°~-2.5°/后轮 -2°~-1°、前束 0.00–0.20°/后束 0.10–0.25°、
       弹簧刚度 1–41、防倾杆 1–21、前底盘 15–35/后底盘 40–60、
       前胎压 22.5–29.5 psi / 后胎压 20.5–26.5 psi。
     """
 
-    front_wing: Optional[int] = None
-    rear_wing: Optional[int] = None
-    differential_on_throttle: Optional[int] = None
-    differential_off_throttle: Optional[int] = None
-    front_camber: Optional[float] = None            # °
-    rear_camber: Optional[float] = None             # °
-    front_toe: Optional[float] = None               # °
-    rear_toe: Optional[float] = None                # °
-    front_suspension: Optional[int] = None          # 1–41（软→硬）
-    rear_suspension: Optional[int] = None           # 1–41（软→硬）
-    front_arb: Optional[int] = None                 # 1–21（软→硬）
-    rear_arb: Optional[int] = None                  # 1–21（软→硬）
-    front_ride_height: Optional[int] = None         # mm（前底盘 15–35）
-    rear_ride_height: Optional[int] = None          # mm（后底盘 40–60）
-    brake_bias: Optional[float] = None              # % 前刹占比
-    brake_pressure: Optional[float] = None          # %
-    front_tyre_pressure: Optional[float] = None     # psi
-    rear_tyre_pressure: Optional[float] = None      # psi
+    front_wing: Optional[int] = None              # m_frontWing
+    rear_wing: Optional[int] = None               # m_rearWing
+    diff_on_throttle: Optional[int] = None        # m_onThrottle
+    diff_off_throttle: Optional[int] = None       # m_offThrottle
+    front_camber: Optional[float] = None          # m_frontCamber（°）
+    rear_camber: Optional[float] = None           # m_rearCamber（°）
+    front_toe: Optional[float] = None             # m_frontToe（°）
+    rear_toe: Optional[float] = None              # m_rearToe（°）
+    front_suspension: Optional[int] = None        # m_frontSuspension（1–41 软→硬）
+    rear_suspension: Optional[int] = None         # m_rearSuspension（1–41 软→硬）
+    front_anti_roll_bar: Optional[int] = None     # m_frontAntiRollBar（1–21 软→硬）
+    rear_anti_roll_bar: Optional[int] = None      # m_rearAntiRollBar（1–21 软→硬）
+    front_ride_height: Optional[int] = None       # m_frontSuspensionHeight（mm，前底盘 15–35）
+    rear_ride_height: Optional[int] = None        # m_rearSuspensionHeight（mm，后底盘 40–60）
+    brake_pressure: Optional[int] = None          # m_brakePressure（%）
+    brake_bias: Optional[int] = None              # m_brakeBias（% 前刹占比）
+    engine_braking: Optional[int] = None          # m_engineBraking
+    rear_left_tyre_pressure: Optional[float] = None    # m_rearLeftTyrePressure（psi）
+    rear_right_tyre_pressure: Optional[float] = None   # m_rearRightTyrePressure（psi）
+    front_left_tyre_pressure: Optional[float] = None   # m_frontLeftTyrePressure（psi）
+    front_right_tyre_pressure: Optional[float] = None  # m_frontRightTyrePressure（psi）
+    ballast: Optional[int] = None                 # m_ballast
+    fuel_load: Optional[float] = None             # m_fuelLoad（读值，非推荐项；TODO(verify) 单位）
 
 
 class SetupSnapshot(Stamped):
@@ -278,6 +286,50 @@ class SetupSnapshot(Stamped):
     track_id: str
     name: str
     params: SetupParams
+
+
+# ---------------------------------------------------------------------------
+# L5 — Setup 推荐（PHASE 12）
+# ---------------------------------------------------------------------------
+
+class EvidenceRef(BaseModel):
+    """一条推荐理由引用的证据：指向某个只读 Tool 的返回值，带其信封等级。
+
+    诚实性：evidence 必须来自 AI 实际读到的 ToolResult，其 tool / source_level /
+    confidence 需与该 ToolResult 的 5 字段信封一致，不得虚构。
+    """
+
+    tool: str                      # 只读 Tool 名（get_lap/get_sector/get_corner/compare/validate_setup 等）
+    source_level: SourceLevel      # 该证据的来源等级（通常 DERIVED/RAW/GAME_DATA）
+    confidence: Confidence         # 该证据的置信度
+    summary: str                   # 证据要点（如 "S2 平均慢 0.3s，弯 14 出弯 92km/h"）
+
+
+class SetupRationale(BaseModel):
+    """推荐中单条改动（或整体策略）的理由：改什么、怎么改、为什么、凭据。"""
+
+    field: str                     # SetupParams 字段名；"all" = 整体策略
+    change: str                    # 建议动作（"+2" / "软一档" / "保持"）
+    reason: str                    # 为什么（引用 evidence）
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    confidence: Confidence = Confidence.LOW
+
+
+class SetupRecommendation(Stamped):
+    """一条结构化 Setup 推荐（AI 产出，HYPOTHESIS，待 A-B 验证）。
+
+    信封语义：整体 source_level=HYPOTHESIS（AI 推断假设，待验证）；confidence = 所有
+    evidence 的最弱置信度（weakest-link，不信任模型自评）；unit="setup"。
+    """
+
+    recommendation_id: str
+    track_id: str
+    session_uid: Optional[int] = None
+    setup_version: str             # 目标版本号（后续可被 save_setup/validate_setup 复用）
+    summary: str
+    params: SetupParams
+    rationale: list[SetupRationale]
+    status: ValidationStatus = ValidationStatus.PREDICTED   # 待 A-B 验证
 
 
 # ---------------------------------------------------------------------------
