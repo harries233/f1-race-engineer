@@ -1,7 +1,7 @@
 # F1 25 AI Race Engineer — 架构与数据 Schema（v0.1）
 
 > 本文档是项目唯一权威的架构与数据契约。改动设计必须先改这里，再动代码。
-> 状态：2026-08-13 建立。PHASE 1–12 已落地（L1 接收 → L2 校验 → L3 入库 SQLite → payload 解析+字段校验 → L4 lap/sector/compare/validate → 结构化入库 → Tool 层 → L5 AI 骨架 → L5 接真实 LLM → 赛道数据层 + 逐弯 CornerRecord → Setup 推荐产品化），§12 真实 UDP 验证通过。
+> 状态：2026-08-13 建立。PHASE 1–13 已落地（L1 接收 → L2 校验 → L3 入库 SQLite → payload 解析+字段校验 → L4 lap/sector/compare/validate → 结构化入库 → Tool 层 → L5 AI 骨架 → L5 接真实 LLM → 赛道数据层 + 逐弯 CornerRecord → Setup 推荐产品化 → 占位收尾：逐弯三项进阶指标 + m_trackId 映射表），§12 真实 UDP 验证通过。
 
 ---
 
@@ -74,7 +74,7 @@
 | Session | L2/L3 | session_uid / track_id / session_type / weather / track_temp / … | 天气/油量/ERS/DRS 上下文 |
 | LapRecord | L3+L4 | lap_number / lap_time / sector1-3 / valid_flag / setup_version | setup_version → SetupSnapshot |
 | SectorRecord | L4 | sector_time / entry_speed / min_speed / exit_speed | 速度字段 DERIVED |
-| CornerRecord | L4 | entry/mid/exit 各指标 + time_loss_phase | 依赖独立赛道数据层（见 §4，PHASE 11 已实现；time_loss_phase/exit_traction/mid_stability 待参考圈/车轮滑移/稳定性定义） |
+| CornerRecord | L4 | track_id / lap_number / corner_number + entry/mid/exit 各指标 + mid_stability / exit_traction / time_loss_phase | 依赖独立赛道数据层（见 §4）；PHASE 13 补齐三项进阶指标（mid_stability=中段转向抖动、exit_traction=MotionEx 驱动轮滑移、time_loss_phase=参考圈对比） |
 | SetupSnapshot | L3 | setup_version / params(SetupParams) | 版本化管理；SetupParams 1:1 镜像 packet 5（23 字段） |
 | SetupRecommendation | L5 | recommendation_id / summary / params / rationale / status | AI 结构化推荐（HYPOTHESIS，待 A-B 验证） |
 | Experiment | L4 | exp_id / status / test_conditions / results | BASELINE/TEST 对比与验证 |
@@ -94,7 +94,8 @@
 - **坐标选择**：弯角用 `m_lapDistance`（沿赛道里程，米）区间定义，不依赖 Motion 世界坐标——UDP 自带该字段，且遥测帧与 lapDistance 帧的跨 packet 对齐已有 PHASE 9 手法（`m_overallFrameIdentifier`）。
 - **模型与注册表**：`Track` / `CornerDefinition`（Pydantic）+ 内存注册表 `get_track` / `list_tracks` / `register`。
 - **种子赛道**：`shanghai`（16 弯、全长 5.451 km = GAME_DATA；lapDistance 起止 = HYPOTHESIS 均匀等分占位，待真实数据标定）。
-- **分层**：几何在 `src/track/`；逐弯指标确定性计算在 `src/analysis/corner.py`（对齐 / 分段 / entry-mid-exit 归约）；AI 只经 `get_corner` Tool 读取，产出 `CornerRecord`（DERIVED，置信度 MEDIUM）。
+- **分层**：几何在 `src/track/`；逐弯指标确定性计算在 `src/analysis/corner.py`（对齐 / 分段 / entry-mid-exit 归约）与 `src/analysis/corner_advanced.py`（MotionEx 出口牵引）；AI 只经 `get_corner` Tool 读取，产出 `CornerRecord`（DERIVED，置信度 MEDIUM）。
+- **m_trackId 映射（PHASE 13）**：`src/track/track_ids.py` 提供 Session packet `m_trackId`（int8，-1=unknown）→ `track_id`（registry 键）的官方映射（GAME_DATA，VERIFIED 自官方 Spec 附录「Track IDs」p.27，共 28 条）。`get_corner` 缺省 track_id 时经 `track_id_for` 自动解析；`get_session` 把 m_trackId 解析为 track_id/track_name。
 
 ---
 
@@ -125,10 +126,11 @@ f1-race-engineer/
 │   ├── protocol/             # 多协议分层（f1_25_2026 已实现：header/packets/parser/
 │   │                         #   validate/structs/payload/field_validate/flatten；
 │   │                         #   f1_25_base 占位）
-│   ├── track/                # 赛道数据层（PHASE 11：models + registry + shanghai 种子）
+│   ├── track/                # 赛道数据层（PHASE 11：models + registry + shanghai 种子；
+│   │                         #   PHASE 13：track_ids.py m_trackId→track_id 映射）
 │   ├── analysis/             # L4 确定性计算（lap.py + sector.py + compare.py +
 │   │                         #   experiment.py + sector_segment.py + corner.py +
-│   │                         #   recommend.py 已建）
+│   │                         #   corner_advanced.py + recommend.py 已建）
 │   ├── tools/                # L4→L5 Tool 层（registry + get_session/get_telemetry/
 │   │                         #   get_lap/get_sector/get_corner/list_sessions/compare/
 │   │                         #   save_setup/list_setups/validate_setup/

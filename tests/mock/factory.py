@@ -195,8 +195,25 @@ def build_session_history_datagram(
     return build_header_bytes(packet_id=11, **header_overrides) + payload
 
 
-def build_session_datagram(*, weather: int = 0, **header_overrides) -> bytes:
-    """Session（packet 1）：把首个 payload 字段 weather（uint8）写入真实值。"""
+def build_session_datagram(*, weather: int = 0, track_id: int | None = None, **header_overrides) -> bytes:
+    """Session（packet 1）：把 weather（uint8）与 m_trackId（int8，offset 7）写入真实值。"""
     data = bytearray(build_datagram(1, **header_overrides))
     struct.pack_into("<B", data, HEADER_SIZE, weather)
+    if track_id is not None:
+        struct.pack_into("<b", data, HEADER_SIZE + 7, track_id)
+    return bytes(data)
+
+
+def build_motion_ex_datagram(
+    *,
+    slip_ratios: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0),
+    **header_overrides,
+) -> bytes:
+    """Motion Ex（packet 13）：把 m_wheelSlipRatio[4]（RL,RR,FL,FR）写入真实值。
+
+    MotionEx 是 player-car-only 单结构（61 float）；slip ratio 位于第 5 组
+    （前 4 组各 4 float），payload 内 float offset 16（= 字节 offset HEADER_SIZE+64）。
+    """
+    data = bytearray(build_datagram(13, **header_overrides))
+    struct.pack_into("<4f", data, HEADER_SIZE + 16 * 4, *slip_ratios)
     return bytes(data)

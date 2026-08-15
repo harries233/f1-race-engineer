@@ -8,8 +8,9 @@
   - CarTelemetry 没有 m_lapDistance，只有 LapData 有；两者靠 header 全局单调帧号
     `m_overallFrameIdentifier` 时间对齐（同 PHASE 9 sector 切分口径）。
   - 弯角指标全部 DERIVED；弯角边界为估算（HYPOTHESIS），故 CornerRecord 置信度 MEDIUM。
-  - 需参考圈对比的字段（time_loss_phase）、需 MotionEx 车轮滑移的（exit_traction）、
-    需稳定性定义的（mid_stability）本 phase 不产出，留 None（诚实声明缺数据）。
+  - PHASE 13 起：mid_stability 由中段转向抖动推导（corner_metrics 内）；time_loss_phase
+    （参考圈对比）与 exit_traction（MotionEx 车轮滑移）依赖跨圈/跨 packet 数据，
+    由调用方经 phase_time_loss / corner_advanced.exit_traction 算好后传入。
 
 字段口径：
   - entry/mid/exit 速度：弯角区间内速度序列的首帧 / 最小 / 末帧。
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from dataclasses import dataclass
+from statistics import pstdev
 
 from store.schemas import Confidence, CornerRecord, SourceLevel
 from track import Track
@@ -79,6 +81,7 @@ class CornerMetrics:
     exit_gear: int
     braking_point: float | None  # m（lapDistance，首个刹车 > 阈值）
     brake_release: float | None  # m（lapDistance，最后一个刹车 > 阈值）
+    mid_stability: float | None  # 0.0–1.0，1=最稳（中段转向抖动越少越稳）
 
 
 def align_to_lap_distance(
@@ -160,7 +163,55 @@ def corner_metrics(samples: list[CornerSample]) -> CornerMetrics:
         exit_gear=int(exit_.gear),
         braking_point=braking[0].lap_distance if braking else None,
         brake_release=braking[-1].lap_distance if braking else None,
+        mid_stability=_mid_stability(ordered),
     )
+
+
+def _mid_stability(ordered: list[CornerSample]) -> float | None:
+    """中段转向抖动 → 稳定性（0.0–1.0，1=最稳）。
+
+    定义：取按 lapDistance 升序的中段 1/3 样本，`1 − pstdev(steer)`。
+      - 转向越平稳（中段 steering 抖动越小），pstdev 越小 → 稳定性越接近 1。
+      - 样本不足 3 个 → None（NO DATA → NO FACT，不编造稳定性）。
+    这是「中段稳定性」的一个确定性代理定义（PHASE 13 落定），非物理量纲。
+    """
+    mid = _middle_third(ordered)
+    if len(mid) < 3:
+        return None
+    std = pstdev(s.steer for s in mid)
+    return round(max(0.0, min(1.0, 1.0 - std)), 4)
+
+
+def _middle_third(ordered: list[CornerSample]) -> list[CornerSample]:
+    """按样本数取中段 1/3（lapDistance 升序的中央窗口）。不足 3 个返回空。"""
+    n = len(ordered)
+    if n < 3:
+        return []
+    third = max(1, n // 3)
+    start = (n - third) // 2
+    return ordered[start:start + third]
+
+
+_PHASES = ("ENTRY", "MID", "EXIT")
+
+
+def phase_time_loss(cur: CornerMetrics, ref: CornerMetrics) -> str | None:
+    """参考圈对比 → 本弯角在哪一相（ENTRY|MID|EXIT）损失最多时间（PHASE 13）。
+
+    以 entry_speed / min_speed / exit_speed 三个速度点近似三相的速度表现：
+      deficit[ENTRY] = ref.entry_speed − cur.entry_speed，余类推（km/h）。
+    取 deficit 最大的相；若三相均不慢于参考（deficit ≤ 0，本圈即/优于参考），
+    返回 None（无时间损失，NO DATA → NO FACT 不编造）。
+    """
+    deficits = (
+        (ref.entry_speed - cur.entry_speed),
+        (ref.min_speed - cur.min_speed),
+        (ref.exit_speed - cur.exit_speed),
+    )
+    worst = max(deficits)
+    if worst <= 0:
+        return None
+    return _PHASES[deficits.index(worst)]
 
 
 def build_corner_record(
@@ -170,8 +221,14 @@ def build_corner_record(
     samples: list[CornerSample],
     lap_number: int,
     received_at: str,
+    time_loss_phase: str | None = None,
+    exit_traction: float | None = None,
 ) -> CornerRecord:
-    """组装一条 CornerRecord（DERIVED，置信度 MEDIUM——弯角边界为估算）。"""
+    """组装一条 CornerRecord（DERIVED，置信度 MEDIUM——弯角边界为估算）。
+
+    `mid_stability` 由样本内转向抖动确定性推导；`time_loss_phase`（参考圈对比）与
+    `exit_traction`（MotionEx 车轮滑移）依赖跨圈 / 跨 packet 数据，由调用方算好后传入。
+    """
     m = corner_metrics(samples)
     return CornerRecord(
         source_level=SourceLevel.DERIVED,
@@ -180,6 +237,7 @@ def build_corner_record(
         unit="km/h",
         confidence=Confidence.MEDIUM,
         track_id=track.track_id,
+        lap_number=lap_number,
         corner_number=corner_number,
         entry_braking_point=m.braking_point,
         entry_brake_pressure=m.max_brake * 100.0,
@@ -188,10 +246,10 @@ def build_corner_record(
         mid_min_speed=m.min_speed,
         mid_steering=m.max_steer,
         mid_throttle=m.apex_throttle,
-        mid_stability=None,              # 需稳定性定义 + 参考圈，本 phase 不产出
+        mid_stability=m.mid_stability,
         exit_throttle_application=m.exit_throttle,
-        exit_traction=None,              # 需 MotionEx 车轮滑移，跨 packet，本 phase 不产出
+        exit_traction=exit_traction,
         exit_speed=m.exit_speed,
         exit_gear=m.exit_gear,
-        time_loss_phase=None,            # 需参考圈对比，本 phase 不产出
+        time_loss_phase=time_loss_phase,
     )

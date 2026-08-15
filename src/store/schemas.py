@@ -221,6 +221,7 @@ class CornerRecord(Stamped):
     """逐弯指标，全部 DERIVED。弯角几何/参考点来自独立赛道数据层。"""
 
     track_id: str
+    lap_number: int
     corner_number: int
     entry_braking_point: Optional[float] = None      # DERIVED，米（沿赛道里程 lapDistance）
     entry_brake_pressure: Optional[float] = None     # DERIVED，%

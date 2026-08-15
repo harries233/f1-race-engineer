@@ -1,14 +1,16 @@
 """Tool：get_session —— 读最新 Session 上下文（RAW）。
 
 从 `packet_session` 结构化表取最新一帧，返回天气/温度/赛道/会话类型等上下文。
-字段值按官方 Spec 原始整数/浮点返回；枚举字段（weather/sessionType/trackId）未做
-名称映射，标 TODO(verify)。
+字段值按官方 Spec 原始整数/浮点返回；m_trackId（int）经官方 Track ID 附录解析成
+track_id / track_name（GAME_DATA，VERIFIED，见 track.track_ids）。weather/sessionType
+等其余枚举仍未做名称映射，标 TODO(verify)。
 """
 
 from __future__ import annotations
 
 from store.schemas import Confidence, SourceLevel, now_utc
 from tools.registry import Tool, ToolResult
+from track import track_id_for, track_name_for
 
 _SESSION_FIELDS = (
     "m_weather",
@@ -52,6 +54,10 @@ def get_session(store) -> Tool:
         data = {f: row.get(f) for f in _SESSION_FIELDS}
         data["session_uid"] = row.get("session_uid")
         data["frame_identifier"] = row.get("frame_identifier")
+        m_track_id = row.get("m_trackId")
+        if m_track_id is not None:
+            data["track_id"] = track_id_for(int(m_track_id))
+            data["track_name"] = track_name_for(int(m_track_id))
         return ToolResult(
             source_level=SourceLevel.RAW,
             source="udp:packet:session",
@@ -59,7 +65,10 @@ def get_session(store) -> Tool:
             unit="raw",
             confidence=Confidence.HIGH,
             data=data,
-            notes=["枚举字段(weather/sessionType/trackId)为原始整数，未做名称映射 TODO(verify)"],
+            notes=[
+                "m_trackId 经官方 Track ID 附录解析为 track_id/track_name（VERIFIED）",
+                "枚举字段(weather/sessionType)仍为原始整数，未做名称映射 TODO(verify)",
+            ],
         )
 
     return Tool(

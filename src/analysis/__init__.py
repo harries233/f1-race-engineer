@@ -20,19 +20,31 @@ from analysis.corner import (
     assign_corners,
     build_corner_record,
     corner_metrics,
+    phase_time_loss,
+)
+from analysis.corner_advanced import (
+    MotionExFrame,
+    MotionExSample,
+    align_motion_ex_to_lap_distance,
+    exit_traction,
 )
 
 __all__ = [
     "CornerMetrics",
+    "MotionExFrame",
+    "MotionExSample",
     "SpeedMetrics",
+    "align_motion_ex_to_lap_distance",
     "align_to_lap_distance",
     "assign_corners",
     "build_corner_record",
     "build_lap_record",
     "build_sector_record",
     "corner_metrics",
+    "exit_traction",
     "lap_time_seconds",
     "lap_valid_from_bitflags",
+    "phase_time_loss",
     "sector_speed_metrics",
     "sector_time_seconds",
 ]
