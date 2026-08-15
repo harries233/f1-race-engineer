@@ -1,0 +1,8 @@
+<resources>
+    <!-- Compose 应用外壳主题：纯黑背景，无 ActionBar（UI 全由 Compose 绘制） -->
+    <style name="Theme.F1RaceEngineer" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ic_launcher_background</item>
+        <item name="android:statusBarColor">@color/ic_launcher_background</item>
+        <item name="android:navigationBarColor">@color/ic_launcher_background</item>
+    </style>
+</resources>

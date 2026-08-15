@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 简洁 F1 主题图标：赛车红「速度条」+ 白色中线 -->
+    <path
+        android:fillColor="#E10600"
+        android:pathData="M30,34 L78,34 L78,42 L30,42 Z" />
+    <path
+        android:fillColor="#E10600"
+        android:pathData="M38,50 L70,50 L70,58 L38,58 Z" />
+    <path
+        android:fillColor="#E10600"
+        android:pathData="M46,66 L62,66 L62,74 L46,74 Z" />
+</vector>

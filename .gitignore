@@ -11,3 +11,12 @@ build/
 CLAUDE.md
 # 误存的笔记导出（未命名.rtf），不入库
 *.rtf
+
+# Android 构建产物 / 本地配置（不入库）
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.apk
+*.apk
