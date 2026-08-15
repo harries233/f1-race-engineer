@@ -22,9 +22,9 @@ import java.util.concurrent.TimeUnit
  * 流程：启动时静默检查 update.json（多镜像回退）→ 版本号大于本地则提示 →
  * 用户确认后逐源回退下载 APK → FileProvider + ACTION_VIEW 触发系统安装。
  *
- * 说明：update.json / APK 的托管地址依赖发布流程（见根 release 流程）。f1-race-engineer
- * 仓库当前为 private，jsDelivr/GitHub raw 公开源需待仓库公开或改用 GitHub Release 直链；
- * 镜像链结构已就位，默认源留待首次发布时按实际托管方式填实。
+ * 说明：仓库已转公开（2026-08-15），六镜像链（raw → jsDelivr → GitHub Release → ghproxy）
+ * 全部可用；update.json 在仓库根、APK 以 F1-Race-Engineer.apk 提交到 main 并打 tag 固定 URL。
+ * 首次发布走 `bash release.sh <版本号>`（见根 RELEASE.md）。
  */
 data class UpdateInfo(
     val version: String,

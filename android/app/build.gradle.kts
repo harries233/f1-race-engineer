@@ -1,4 +1,15 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File
+import java.util.Properties
+
+// 读取 release 签名配置（~/.gradle/f1-re-release.properties，位于仓库外，勿提交）。
+// keystore 与密码绝不进入 git；缺失时 release 构建回退为未签名（仅 debug 可分发）。
+val keystoreProps = Properties()
+val keystorePropsFile = File(System.getProperty("user.home"), ".gradle/f1-re-release.properties")
+val hasKeystore = keystorePropsFile.exists() && run {
+    keystorePropsFile.inputStream().use { keystoreProps.load(it) }
+    File(keystoreProps.getProperty("KEYSTORE_PATH", "")).exists()
+}
 
 plugins {
     id("com.android.application")
@@ -15,7 +26,18 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (hasKeystore) {
+                storeFile = File(keystoreProps.getProperty("KEYSTORE_PATH"))
+                storePassword = keystoreProps.getProperty("KEYSTORE_PASSWORD")
+                keyAlias = keystoreProps.getProperty("KEY_ALIAS")
+                keyPassword = keystoreProps.getProperty("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -25,6 +47,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (hasKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "changelog": "首个公开版本：F1 25 AI Race Engineer\n- 🏎️ 完整数据链路：UDP 遥测（2026 Season Pack）→ 校验 → 入库 → 确定性分析 → AI 分析 → Setup 推荐 → A/B 验证\n- 📱 Android 客户端：实时仪表盘 / 圈速 / 扇区 / 逐弯 / Setup 对比 / AI 对话\n- 🤖 AI Race Engineer（Claude）多轮工具调用\n- 🔌 局域网连接 Python 后端（HTTP / WebSocket）\n- ⬆️ OTA 自动更新（多镜像，中国网络友好）",
+  "apkUrl": "https://raw.githubusercontent.com/harries233/f1-race-engineer/main/F1-Race-Engineer.apk",
+  "apkUrls": [
+    { "name": "GitHub 直连", "url": "https://raw.githubusercontent.com/harries233/f1-race-engineer/main/F1-Race-Engineer.apk" },
+    { "name": "jsDelivr 加速", "url": "https://fastly.jsdelivr.net/gh/harries233/f1-race-engineer@v1.0.0/F1-Race-Engineer.apk" },
+    { "name": "jsDelivr CDN", "url": "https://cdn.jsdelivr.net/gh/harries233/f1-race-engineer@v1.0.0/F1-Race-Engineer.apk" },
+    { "name": "GitHub Release", "url": "https://github.com/harries233/f1-race-engineer/releases/download/v1.0.0/F1-Race-Engineer.apk" },
+    { "name": "代理镜像", "url": "https://ghproxy.net/https://github.com/harries233/f1-race-engineer/releases/download/v1.0.0/F1-Race-Engineer.apk" }
+  ]
+}
