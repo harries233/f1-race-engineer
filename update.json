@@ -1,12 +1,12 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "changelog": "本次修复：仪表盘油门/刹车进度条显示\n- 🐛 修复油门/刹车进度条永远≈0 的 bug：m_throttle/m_brake 官方 Spec 为 0.0–1.0（float），此前被误按 0–100 再除以 100，现已改为直接钳制到 0..1",
   "apkUrl": "https://raw.githubusercontent.com/harries233/f1-race-engineer/main/F1-Race-Engineer.apk",
   "apkUrls": [
     { "name": "GitHub 直连", "url": "https://raw.githubusercontent.com/harries233/f1-race-engineer/main/F1-Race-Engineer.apk" },
-    { "name": "jsDelivr 加速", "url": "https://fastly.jsdelivr.net/gh/harries233/f1-race-engineer@v1.0.0/F1-Race-Engineer.apk" },
-    { "name": "jsDelivr CDN", "url": "https://cdn.jsdelivr.net/gh/harries233/f1-race-engineer@v1.0.0/F1-Race-Engineer.apk" },
-    { "name": "GitHub Release", "url": "https://github.com/harries233/f1-race-engineer/releases/download/v1.0.0/F1-Race-Engineer.apk" },
-    { "name": "代理镜像", "url": "https://ghproxy.net/https://github.com/harries233/f1-race-engineer/releases/download/v1.0.0/F1-Race-Engineer.apk" }
+    { "name": "jsDelivr 加速", "url": "https://fastly.jsdelivr.net/gh/harries233/f1-race-engineer@v1.0.1/F1-Race-Engineer.apk" },
+    { "name": "jsDelivr CDN", "url": "https://cdn.jsdelivr.net/gh/harries233/f1-race-engineer@v1.0.1/F1-Race-Engineer.apk" },
+    { "name": "GitHub Release", "url": "https://github.com/harries233/f1-race-engineer/releases/download/v1.0.1/F1-Race-Engineer.apk" },
+    { "name": "代理镜像", "url": "https://ghproxy.net/https://github.com/harries233/f1-race-engineer/releases/download/v1.0.1/F1-Race-Engineer.apk" }
   ]
 }
