@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "changelog": "首个公开版本：F1 25 AI Race Engineer\n- 🏎️ 完整数据链路：UDP 遥测（2026 Season Pack）→ 校验 → 入库 → 确定性分析 → AI 分析 → Setup 推荐 → A/B 验证\n- 📱 Android 客户端：实时仪表盘 / 圈速 / 扇区 / 逐弯 / Setup 对比 / AI 对话\n- 🤖 AI Race Engineer（Claude）多轮工具调用\n- 🔌 局域网连接 Python 后端（HTTP / WebSocket）\n- ⬆️ OTA 自动更新（多镜像，中国网络友好）",
+  "changelog": "本次修复：仪表盘油门/刹车进度条显示\n- 🐛 修复油门/刹车进度条永远≈0 的 bug：m_throttle/m_brake 官方 Spec 为 0.0–1.0（float），此前被误按 0–100 再除以 100，现已改为直接钳制到 0..1",
   "apkUrl": "https://raw.githubusercontent.com/harries233/f1-race-engineer/main/F1-Race-Engineer.apk",
   "apkUrls": [
     { "name": "GitHub 直连", "url": "https://raw.githubusercontent.com/harries233/f1-race-engineer/main/F1-Race-Engineer.apk" },
