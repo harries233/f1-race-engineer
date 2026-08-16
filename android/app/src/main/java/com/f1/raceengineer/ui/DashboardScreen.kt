@@ -276,6 +276,6 @@ private fun LiveTelemetryCard(live: Map<String, JSONObject>) {
     }
 }
 
-/** F1 m_throttle/m_brake 为 0–100（%），归一化到 0..1 供进度条。 */
+/** F1 m_throttle/m_brake 为 0.0–1.0（float），直接钳制到 0..1 供进度条。 */
 private fun normalize01(v: Double?): Float =
-    if (v == null) 0f else (v / 100.0).toFloat().coerceIn(0f, 1f)
+    if (v == null) 0f else v.toFloat().coerceIn(0f, 1f)
