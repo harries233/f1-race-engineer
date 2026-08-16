@@ -138,3 +138,21 @@ def test_receiver_wire_to_structured_store(db_path):
 
     assert store.count() == 1
     assert store.structured_row_count() == 24
+
+
+def test_high_bit_session_uid_common_column_signed(db_path):
+    """回归：结构化表公共列 session_uid 与 raw_packets 一样做 uint64 → signed i64
+    转换（真实 live 帧实测 15798122744942365809 高位为 1，直接插入抛 OverflowError）。"""
+    from store.sqlite_store import u64_to_i64
+
+    uid = 15798122744942365809  # 2026-08-16 实拍 live 帧 header 值
+    store = StructuredPacketStore(db_path)
+    store.save(_make_packet(build_datagram(6, session_uid=uid)))
+    store.close()
+
+    rows = _query(
+        db_path,
+        "SELECT session_uid FROM packet_car_telemetry WHERE car_index=0",
+    )
+    assert rows[0][0] == u64_to_i64(uid)
+    assert rows[0][0] == -2648621328767185807

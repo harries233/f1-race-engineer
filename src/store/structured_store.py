@@ -22,7 +22,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from store.schemas import RawPacket, StructuredTable
-from store.sqlite_store import PacketStore
+from store.sqlite_store import PacketStore, u64_to_i64
 
 # 公共列（除 id 外；id 由 AUTOINCREMENT 生成）。data 信封 5 字段 + 上下文 + 外键。
 _COMMON_COLUMNS: tuple[tuple[str, str], ...] = (
@@ -69,7 +69,7 @@ class StructuredPacketStore(PacketStore):
         common = (
             raw_id,
             packet.received_at,
-            header.m_sessionUID,
+            u64_to_i64(header.m_sessionUID),
             header.m_frameIdentifier,
             header.m_overallFrameIdentifier,
             "RAW",          # source_level：结构化行恒为 RAW（直接解析自 UDP，无计算）

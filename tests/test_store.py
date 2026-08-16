@@ -177,3 +177,24 @@ def test_sessions_groups_by_session_uid(db_path):
 
     assert {s["session_uid"] for s in sessions} == {1, 2}
     assert all(s["packet_count"] == 1 for s in sessions)
+
+
+def test_save_session_uid_high_bit_stored_as_signed_i64(db_path):
+    """回归：真实 live 帧实证 F1 25 sessionUID 是随机 uint64，高位为 1（实测
+    15798122744942365809 > 2^63-1）时直接插入 SQLite INTEGER 抛 OverflowError
+    （2026-08-16 生产故障：每帧落库失败 → 不广播 → 手机收不到数据）。
+    修复：补码重解释为 signed i64 入库，全链一致。"""
+    from store.sqlite_store import u64_to_i64
+
+    uid = 15798122744942365809  # 2026-08-16 实拍 live 帧 header 值
+    store = PacketStore(db_path)
+    row_id = store.save(_make_packet(build_datagram(6, session_uid=uid)))
+    store.close()
+
+    (stored,) = _query(
+        db_path,
+        "SELECT session_uid FROM raw_packets WHERE id=?",
+        (row_id,),
+    )[0]
+    assert stored == u64_to_i64(uid)
+    assert stored == -2648621328767185807  # 补码：uid - 2^64

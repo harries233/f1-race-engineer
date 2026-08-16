@@ -7,8 +7,11 @@ duckdb_store.py 复用同一 save/count/close 接口，不动调用方。
 约定：
   - 校验失败帧同样入库（不丢弃），payload BLOB 原样保留。
   - header 可空（datagram < 29 时 header is None）→ header 各列存 NULL。
-  - session_uid（uint64）存 INTEGER：F1 sessionUID 由系统时间派生、实际 < 2^63；
-    若超出会由 sqlite3 显式抛 OverflowError（fail-loud，不静默截断）。
+  - session_uid（Spec 为 uint64）存 INTEGER：SQLite 无无符号 64 位整型，
+    sessionUID 是随机 64 位值、高位为 1 的概率约 50%（真实数据实测
+    15798122744942365809 > 2^63-1，直接插入抛 OverflowError）。
+    因此以补码重解释为 signed i64 入库（u64_to_i64），Python 全链
+    （工具/查询/replay）统一使用该 signed 值，读写边界不还原。
 
 线程安全（PHASE 14）：FastAPI 同步端点跑在线程池、UDP 接收跑在独立线程，都可能
 并发访问同一 store。sqlite3 连接默认不跨线程 —— 此处 `check_same_thread=False` +
@@ -83,6 +86,17 @@ _ISSUE_INSERT_SQL = (
 )
 
 
+def u64_to_i64(value: int) -> int:
+    """Spec uint64 → SQLite 可存的 signed i64（补码重解释，无精度损失）。
+
+    SQLite INTEGER 上限 2^63-1；sessionUID 等 uint64 高位为 1 时直接插入抛
+    OverflowError（真实数据实证）。全链（工具 WHERE 查询、sessions()、
+    replay_udp 会话选择）统一使用转换后的 signed 值，内部自洽；
+    对 < 2^63 的值原样返回，历史数据不受影响。
+    """
+    return value - 2**64 if value >= 2**63 else value
+
+
 class PacketStore:
     """SQLite 持久化：raw_packets（每帧一行）+ validation_issues（每 issue 一行）。"""
 
@@ -115,7 +129,7 @@ class PacketStore:
                     header.m_gameMinorVersion if header else None,
                     header.m_packetVersion if header else None,
                     header.m_packetId if header else None,
-                    header.m_sessionUID if header else None,
+                    u64_to_i64(header.m_sessionUID) if header else None,
                     header.m_sessionTime if header else None,
                     header.m_frameIdentifier if header else None,
                     header.m_overallFrameIdentifier if header else None,

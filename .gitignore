@@ -22,3 +22,9 @@ android/*.apk
 *.apk
 # release 产物：仅放行仓库根的固定名 APK（供 jsDelivr/raw 托管分发），其余 APK 仍忽略
 !F1-Race-Engineer.apk
+
+# 运行时 SQLite 库（本地数据，不入库）
+telemetry.sqlite3*
+demo.sqlite3*
+# macOS zip 解压垃圾
+__MACOSX/
