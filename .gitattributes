@@ -1,0 +1,6 @@
+# Windows 批处理脚本：cmd 在中文系统（CP936/GBK）下必须 GBK + CRLF，
+# 否则双击报「不是内部或外部命令」。强制所有 .bat 以 CRLF 检出（存库规范化 LF）。
+*.bat text eol=crlf
+
+# 保持构建/发布脚本可执行位（Mac/Linux）
+*.sh text eol=lf
